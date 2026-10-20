@@ -311,20 +311,6 @@ function createViewer(canvas) {
   const poster0 = document.getElementById('viewportPoster');
   if (poster0) poster0.addEventListener('click', dismissPoster);
 
-  // X_ite draws on demand. A Text node's font loads asynchronously AFTER replaceWorld resolves,
-  // and the finished glyph geometry doesn't always trigger a repaint, so the text only shows up
-  // when something else forces a frame. Request a few extra frames while the font arrives.
-  let nudgeTimers = [];
-  function nudgeRedraw(b) {
-    nudgeTimers.forEach(clearTimeout);
-    nudgeTimers = [0, 50, 150, 300, 600, 1000, 1500, 2500, 4000].map((ms) => setTimeout(() => {
-      try {
-        if (typeof b.nextFrame === 'function') b.nextFrame();
-        else window.dispatchEvent(new Event('resize'));
-      } catch (e) { /* ignore */ }
-    }, ms));
-  }
-
   // Loads are serialised, and while one is in flight only the newest request is kept,
   // so rapid commands or a slider drag never build up a backlog of stale scenes.
   function show(xml) {
@@ -341,7 +327,6 @@ function createViewer(canvas) {
             const done = await withTimeout(b.replaceWorld(scene), LOAD_TIMEOUT_MS);
             if (done === TIMED_OUT) { console.warn('X3D scene is still loading resources; continuing'); notify('timeout', 'The 3D engine is still waiting on a download for this scene. It may appear shortly; if not, try reloading.'); }
             dismissPoster(); // hide the poster once the first scene is in
-            if (next.includes('<Text')) nudgeRedraw(b); // text fonts load async; force repaints until they land
           } catch (err) {
             console.error('X3D load failed:', err);
             notify('error', '3D engine error: ' + (err && err.message ? err.message : err));
