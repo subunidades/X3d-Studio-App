@@ -311,21 +311,6 @@ function createViewer(canvas) {
   const poster0 = document.getElementById('viewportPoster');
   if (poster0) poster0.addEventListener('click', dismissPoster);
 
-  // X_ite only draws when something changes. A Text node's font downloads after replaceWorld resolves,
-  // and when the glyphs are finally built nothing asks for a repaint in a static scene, so the text
-  // stays invisible until the next command swaps the world. Each Text node publishes `textBounds`
-  // the moment its font is ready and its glyphs exist, so subscribe to that and request a frame then.
-  function watchText(sc, xml, b) {
-    for (const m of xml.matchAll(/DEF="(txt_\d+)"/g)) {
-      try {
-        const field = sc.getNamedNode(m[1]).getField('textBounds');
-        field.addFieldCallback('x3dstudio-redraw', () => b.nextFrame());
-        const v = field.getValue();
-        if (v.x || v.y) b.nextFrame(); // font was already ready (cached), so no event is coming
-      } catch (e) { /* node missing or not a Text: nothing to watch */ }
-    }
-  }
-
   // Loads are serialised, and while one is in flight only the newest request is kept,
   // so rapid commands or a slider drag never build up a backlog of stale scenes.
   function show(xml) {
@@ -339,11 +324,9 @@ function createViewer(canvas) {
             const b = await ready;
             const scene = await withTimeout(b.createX3DFromString(next), LOAD_TIMEOUT_MS);
             if (scene === TIMED_OUT) { console.warn('X3D parse timed out'); notify('timeout', 'The 3D engine took too long to read this scene, so it was skipped. Try a simpler command, or reload.'); dismissPoster(); continue; }
-            if (next.includes('DEF="txt_')) watchText(scene, next, b);
             const done = await withTimeout(b.replaceWorld(scene), LOAD_TIMEOUT_MS);
             if (done === TIMED_OUT) { console.warn('X3D scene is still loading resources; continuing'); notify('timeout', 'The 3D engine is still waiting on a download for this scene. It may appear shortly; if not, try reloading.'); }
             dismissPoster(); // hide the poster once the first scene is in
-            if (next.includes('DEF="txt_')) watchText(scene, next, b);
           } catch (err) {
             console.error('X3D load failed:', err);
             notify('error', '3D engine error: ' + (err && err.message ? err.message : err));
@@ -548,26 +531,6 @@ function parsePosition(t) {
   const phrases = Object.entries(DATA.POSITIONS).sort((a, b) => b[0].length - a[0].length);
   for (const [phrase, pos] of phrases) if (wordRe(phrase).test(t)) return [...pos];
   return [0, 0, 0];
-}
-
-/** True when the prompt gives a place ("at 1 2 3", "to the left", "above"), as opposed to falling back to the origin. */
-function hasExplicitPosition(t) {
-  if (COORD_RE.test(t)) return true;
-  return Object.keys(DATA.POSITIONS).some((phrase) => wordRe(phrase).test(t));
-}
-
-/** Text defaults to the origin, so a second label would sit exactly on the first.
- *  Walk the new label down (line by line) until it no longer overlaps an existing text. */
-function clearOfTexts(scene, pos, text, size) {
-  const box = (str, sz) => ({ w: Math.max(1, str.length) * sz * 1.2 * 0.6, h: sz * 1.2 * 1.3 });
-  const me = box(text, size), p = [...pos];
-  const others = scene.objects.filter((o) => o.shape === 'text').map((o) => ({ o, b: box(o.text || 'text', o.size) }));
-  for (let n = 0; n < 60; n++) {
-    const hit = others.some(({ o, b }) => Math.abs(p[0] - o.position[0]) < (me.w + b.w) / 2 && Math.abs(p[1] - o.position[1]) < (me.h + b.h) / 2);
-    if (!hit) break;
-    p[1] -= me.h;
-  }
-  return p;
 }
 
 function parseRotation(t) {
@@ -1042,7 +1005,7 @@ function shapeBody(o, i) {
   const s = o.size;
   if (o.shape === 'text') {
     const label = xmlEsc(o.text || 'text'), c = o.color;
-    return `      <Billboard axisOfRotation="0 0 0"><Shape><Text DEF="txt_${i}" string='"${label}"'><FontStyle size="${f3(s * 1.2)}" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/></Text>` +
+    return `      <Billboard axisOfRotation="0 0 0"><Shape><Text string='"${label}"'><FontStyle size="${f3(s * 1.2)}" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/></Text>` +
       `<Appearance><Material DEF="mat_${i}" diffuseColor="${c.map(f3).join(' ')}" emissiveColor="${c.map((v) => f3(v * 0.55)).join(' ')}" transparency="${(o.transparency || 0).toFixed(2)}"/></Appearance></Shape></Billboard>\n`;
   }
   if (o.shape === 'tesseract') {
@@ -1684,8 +1647,7 @@ function runAdd(scene, t, orig) {
   const color = style.forceColor || ci.rgb;
   const cname = ci.defaulted && style.texture === 'rainbow' ? 'rainbow' : style.forceColor ? (style.color2 && style.color2[0] > 0.8 && style.forceColor[0] > 0.5 ? 'candy' : 'zebra') : ci.name;
   const size = relSize(tc, scene) ?? parseSize(tc), rotation = parseRotation(tc), an = parseAnimations(tc);
-  let position = rel ? relPos(rel.ref, rel.rel, size) : parsePosition(tc);
-  if (shape === 'text' && !rel && !hasExplicitPosition(tc)) position = clearOfTexts(scene, position, text, size);
+  const position = rel ? relPos(rel.ref, rel.rel, size) : parsePosition(tc);
   let count = shape === 'text' ? 1 : parseCount(tc);
   if (count === 1 && sh.plural && shape !== 'text') count = 3;
   if (scene.objects.length + count > 300) return { status: 'info', message: 'That would make the scene very heavy (300 object limit). Try fewer, or clear some first.' };
