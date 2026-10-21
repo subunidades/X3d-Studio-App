@@ -282,21 +282,50 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
  * Replaces the old "reload /scene.x3d from the server" round-trip. */
 
 function createViewer(canvas) {
-  let browser = null;
-  const ready = new Promise((resolve) => {
-    X3D(() => {
-      browser = X3D.getBrowser(canvas);
-      resolve(browser);
-    });
-  });
-
-  const withTimeout = (promise, ms) => Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms, TIMED_OUT))]);
   const TIMED_OUT = Symbol('timed out');
-  const LOAD_TIMEOUT_MS = 10000;   // a scene that needs a slow download can't freeze later commands
-  const POSTER_MAX_MS = 7000;      // the poster never outstays this, whatever the network does
+  const BOOT_TIMEOUT_MS = 20000;  // engine script + components + font prefetch
+  const SOFT_MS = 10000;          // after this, tell the user it is slow (but do NOT throw the work away)
+  const HARD_MS = 60000;          // absolute cap for a single parse / replaceWorld
+  const POSTER_MAX_MS = 7000;     // the poster never outstays this, whatever the network does
 
+  // setTimeout that is cleared as soon as the race is decided (no stray timers firing later)
+  const withTimeout = (promise, ms) => {
+    let t;
+    const timer = new Promise((resolve) => { t = setTimeout(resolve, ms, TIMED_OUT); });
+    return Promise.race([promise, timer]).finally(() => clearTimeout(t));
+  };
   const notify = (kind, message) => document.dispatchEvent(new CustomEvent('viewer-status', { detail: { kind, message } }));
-  let pending = null, pump = null, initialized = false;
+
+  /* ── Boot: ONE shared promise. Rejects on X3D() failure or timeout, and resets itself so the next call retries. ── */
+  let bootPromise = null;
+  function boot() {
+    if (bootPromise) return bootPromise;
+    const attempt = (async () => {
+      if (typeof X3D === 'undefined') throw new Error('X_ite script did not load (CDN blocked or offline)');
+      // X3D(ok, fail): the second callback is what the old code was missing, a failure used to hang forever.
+      await new Promise((resolve, reject) => X3D(resolve, reject));
+      const b = X3D.getBrowser(canvas);
+      // X_ite lazy-loads components (Text, Geometry3D, ...) as separate files the FIRST time a scene needs them.
+      // Pulling them in here moves that download out of the first parse, where it used to eat the timeout.
+      await b.loadComponents(b.getProfile('Full'));
+      return b;
+    })();
+    bootPromise = withTimeout(attempt, BOOT_TIMEOUT_MS).then((b) => {
+      if (b === TIMED_OUT) throw new Error('3D engine did not start within ' + (BOOT_TIMEOUT_MS / 1000) + 's');
+      return b;
+    });
+    bootPromise.catch(() => { bootPromise = null; });   // allow retry; don't cache the failure
+    return bootPromise;
+  }
+  // Warm the browser cache for the default Text font so the first Text node doesn't wait on it.
+  try {
+    const base = 'https://cdn.jsdelivr.net/npm/x_ite@16.1.2/dist/assets/fonts/PT_Sans/';
+    ['PTSans-Regular.woff2'].forEach((f) => fetch(base + f, { mode: 'cors', cache: 'force-cache' }).catch(() => {}));
+  } catch (e) { /* prefetch is best-effort */ }
+  const ready = boot();
+  ready.catch(() => {});  // silence the unhandled-rejection warning; show() reports it
+
+  let pending = null, pump = null, initialized = false, gen = 0, lastReplace = Promise.resolve();
 
   function dismissPoster() {
     if (initialized) return;
@@ -311,32 +340,52 @@ function createViewer(canvas) {
   const poster0 = document.getElementById('viewportPoster');
   if (poster0) poster0.addEventListener('click', dismissPoster);
 
-  // Loads are serialised, and while one is in flight only the newest request is kept,
-  // so rapid commands or a slider drag never build up a backlog of stale scenes.
+  // A slow step is never silently discarded. After SOFT_MS we warn; if nothing newer is queued we keep waiting
+  // (up to HARD_MS) instead of throwing the result away. Only a NEWER request supersedes it.
+  async function settle(promise, what) {
+    let r = await withTimeout(promise, SOFT_MS);
+    if (r !== TIMED_OUT) return r;
+    notify('timeout', 'The 3D engine is slow ' + what + '. Still working on it.');
+    console.warn('X3D ' + what + ' exceeded ' + SOFT_MS + 'ms; ' + (pending !== null ? 'superseded by a newer request' : 'continuing to wait'));
+    if (pending !== null) return TIMED_OUT;   // newer request is waiting; drop this one
+    r = await withTimeout(promise, HARD_MS - SOFT_MS);
+    if (r === TIMED_OUT) notify('error', 'The 3D engine gave up ' + what + ' after ' + (HARD_MS / 1000) + 's. Try a simpler command, or reload.');
+    return r;
+  }
+
+  // Loads are serialised; while one is in flight only the newest request is kept.
   function show(xml) {
     pending = xml;
+    gen++;
     if (!pump) {
       pump = (async () => {
-        while (pending !== null) {
-          const next = pending;
-          pending = null;
-          try {
-            const b = await ready;
-            const scene = await withTimeout(b.createX3DFromString(next), LOAD_TIMEOUT_MS);
-            if (scene === TIMED_OUT) { console.warn('X3D parse timed out'); notify('timeout', 'The 3D engine took too long to read this scene, so it was skipped. Try a simpler command, or reload.'); dismissPoster(); continue; }
-            const done = await withTimeout(b.replaceWorld(scene), LOAD_TIMEOUT_MS);
-            if (done === TIMED_OUT) { console.warn('X3D scene is still loading resources; continuing'); notify('timeout', 'The 3D engine is still waiting on a download for this scene. It may appear shortly; if not, try reloading.'); }
-            dismissPoster(); // hide the poster once the first scene is in
-          } catch (err) {
-            console.error('X3D load failed:', err);
-            notify('error', '3D engine error: ' + (err && err.message ? err.message : err));
-            dismissPoster(); // never leave the user stuck on the poster
+        try {
+          while (pending !== null) {
+            const next = pending, myGen = gen;
+            pending = null;
+            try {
+              const b = await ready;                       // rejects (and resets) on boot failure
+              const scene = await settle(b.createX3DFromString(next), 'reading the scene');
+              if (scene === TIMED_OUT) continue;
+              if (myGen !== gen) continue;                 // a newer scene arrived while we parsed: skip this stale one
+              await withTimeout(lastReplace.catch(() => {}), HARD_MS);   // never overlap two replaceWorld calls
+              lastReplace = b.replaceWorld(scene);
+              await settle(lastReplace, 'loading resources');
+              dismissPoster();                             // never leave the user on the poster
+            } catch (err) {
+              console.error('X3D load failed:', err);
+              notify('error', '3D engine error: ' + (err && err.message ? err.message : err));
+              dismissPoster();
+              if (pending === null) break;                 // don't spin on a dead engine; next show() retries boot
+            }
           }
+        } finally {
+          pump = null;                                     // ALWAYS release, so a later show() can restart the loop
+          if (pending !== null) show(pending);             // a request slipped in during teardown
         }
-        pump = null;
       })();
     }
-    return pump || Promise.resolve();
+    return pump;
   }
 
   return { show, ready };
