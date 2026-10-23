@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>X3D Studio</title>
-<script src="https://cdn.jsdelivr.net/npm/x_ite@16.1.2/dist/x_ite.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/x_ite@16.1.2/dist/x_ite.min.js" integrity="sha384-8VpGgg/VpqFk16Qx/nWK/mL81l6P+LZTIGVJKvAMcPoA/t63twsIgCOSJjvrHG31" crossorigin="anonymous"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }
@@ -1222,8 +1222,8 @@ class Scene {
 
   pushUndo(snapshotJson) { this._undo.push(snapshotJson); if (this._undo.length > 60) this._undo.shift(); this._redo.length = 0; }
   checkpoint() { this.pushUndo(JSON.stringify(this)); }
-  undo() { if (!this._undo.length) return false; this._redo.push(JSON.stringify(this)); this.restore(JSON.parse(this._undo.pop())); return true; }
-  redo() { if (!this._redo.length) return false; this._undo.push(JSON.stringify(this)); this.restore(JSON.parse(this._redo.pop())); return true; }
+  undo() { if (!this._undo.length) return false; this._redo.push(JSON.stringify(this)); return this.restore(JSON.parse(this._undo.pop())); }
+  redo() { if (!this._redo.length) return false; this._undo.push(JSON.stringify(this)); return this.restore(JSON.parse(this._redo.pop())); }
 
   groundY() {
     if (!this.objects.length) return -1;
@@ -1283,7 +1283,22 @@ ${this.environmentXml()}${this.contentXml()}  </Scene>
   }
 
   snapshot() { return JSON.parse(JSON.stringify(this)); }
-  restore(s) { this.reset(); Object.assign(this, s); this.objects.forEach(normObj); }
+  restore(s) {
+    // Transactional: validate by rebuilding the X3D; on any failure roll back to the prior state and return false.
+    const bak = JSON.stringify(this);
+    try {
+      if (!s || typeof s !== 'object' || Array.isArray(s)) throw new Error('bad snapshot');
+      this.reset();
+      for (const k of Object.keys(s)) if (k !== '__proto__' && k[0] !== '_' && k in this) this[k] = s[k];
+      if (!Array.isArray(this.objects)) throw new Error('bad objects');
+      this.objects.forEach(normObj);
+      this.toX3D();
+      return true;
+    } catch (e) {
+      this.reset(); Object.assign(this, JSON.parse(bak));
+      return false;
+    }
+  }
 }
 
 /* ── Shape / target lookup ─────────────────────────────────────────────────── */
@@ -2478,7 +2493,9 @@ function renderSaves() {
       mk('Load', () => {
         const s = readJSON(STORE_SAVES, {})[name];
         if (!s) return addLog('error', 'Load', `No save named '${name}'.`);
-        scene.checkpoint(); scene.restore(s); addLog('ai', 'Load', `Loaded '${name}'.`); render();
+        scene.checkpoint();
+        if (!scene.restore(s)) return addLog('error', 'Load', `Save '${name}' is corrupt or from an incompatible version; left the current scene untouched.`);
+        addLog('ai', 'Load', `Loaded '${name}'.`); render();
       }),
       mk('Delete', () => { const all = readJSON(STORE_SAVES, {}); delete all[name]; writeJSON(STORE_SAVES, all); renderSaves(); }));
     el.append(row);
@@ -2570,7 +2587,7 @@ slider.addEventListener('input', () => {
 /* ───────── Boot: #agent (default) or #<surface_id> ───────── */
 const STORE_STARTER = 'x3d-studio:starter-shown';
 const prev = readJSON(STORE_CURRENT, null);
-if (prev) scene.restore(prev);
+if (prev && !scene.restore(prev)) writeJSON(STORE_CURRENT, null);   // corrupt/incompatible autosave: discard it instead of bricking every load
 // Starter scene: shown once, on a first visit or the first time this version opens on an empty saved scene.
 // It is applied AFTER the first scene has loaded, so if a device struggles with it the app is still up and usable.
 const wantStarter = !prev || (!scene.objects.length && !scene.raw && !readJSON(STORE_STARTER, false));
