@@ -215,7 +215,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span style="opacity:.6">(build 2026-10-23a)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span style="opacity:.6">(build 2026-10-24a)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -575,6 +575,7 @@ function parseSize(t) {
 }
 
 function parsePosition(t) {
+  t = t.replace(/\bfar\s+to\s+the\b/g, 'far');
   const c = t.match(COORD_RE);
   if (c) return [num(c[1]), num(c[2]), num(c[3])];
   const phrases = Object.entries(DATA.POSITIONS).sort((a, b) => b[0].length - a[0].length);
@@ -1091,9 +1092,9 @@ function parseAnimations(t) {
   const types = ANIM_RES.filter(([, re]) => re.test(s)).map(([k]) => k).filter((k) => !(k === 'flip' && /upside down|inverted|flipped/.test(s)));
   let speed = 1, dir = 1;
   if (/\b(very slowly|extremely slowly|super slow|painfully slow)\b/.test(s)) speed = 3;
-  else if (/\b(slowly|slow|gently|lazily|leisurely)\b/.test(s)) speed = 2;
+  else if (/\b(slowly|slower|slow|gently|lazily|leisurely)\b/.test(s)) speed = 2;
   else if (/\b(very fast|very quickly|super fast|insanely fast|frantically)\b/.test(s)) speed = 0.25;
-  else if (/\b(fast|quickly|quick|rapidly|rapid|speedily|briskly)\b/.test(s)) speed = 0.5;
+  else if (/\b(fast|faster|quickly|quicker|quick|rapidly|rapid|speedily|briskly)\b/.test(s)) speed = 0.5;
   if (/\b(reverse|reversed|backwards?|counter-?clockwise|anti-?clockwise|opposite)\b/.test(s)) dir = -1;
   return { types, speed, dir };
 }
@@ -1201,6 +1202,7 @@ class Scene {
   constructor() {
     Object.defineProperty(this, '_undo', { value: [], writable: true, enumerable: false });
     Object.defineProperty(this, '_redo', { value: [], writable: true, enumerable: false });
+    Object.defineProperty(this, '_focus', { value: null, writable: true, enumerable: false });
     this.reset();
   }
 
@@ -1218,6 +1220,7 @@ class Scene {
     this.shadows = false;
     this.lightsDirty = false;
     this.raw = null;
+    this._focus = null;
   }
 
   pushUndo(snapshotJson) { this._undo.push(snapshotJson); if (this._undo.length > 60) this._undo.shift(); this._redo.length = 0; }
@@ -1354,14 +1357,14 @@ function resolveTargets(t, scene) {
   if (/\boldest\b/.test(t)) return res(cand.length ? [cand[0]] : []);
   if (ALL_RE.test(t) || plural || /\b(them|those|these)\b/.test(t)) return res(cand);
   if (filtered) return res(cand.length ? [cand[cand.length - 1]] : []);
-  if (/\b(it|that|this)\b/.test(t)) return res([objs.length - 1]);
+  if (/\b(it|that|this)\b/.test(t)) { const fi = scene._focus ? objs.indexOf(scene._focus) : -1; return res([fi >= 0 ? fi : objs.length - 1]); }
   return res([]);
 }
 const describeFilter = (sh, sp) => [sp && sp.name, sh && shapeLabel(sh.shape)].filter(Boolean).join(' ') || 'object';
 
 /* ── Relative placement ("next to the red sphere") ─────────────────────────── */
 
-const REL_RE = /\b(next to|beside|alongside|adjacent to|to the left of|to the right of|left of|right of|on top of|atop|above|over|below|underneath|under|beneath|behind|in front of|near|close to)\s+(?:the\s+|that\s+|this\s+|my\s+)?/;
+const REL_RE = /\b(next to|beside|alongside|adjacent to|to the left of|to the right of|left of|right of|on top of|atop|above|over|below|underneath|under|beneath|behind|in front of|near|close to)\s+(?:the\s+|that\s+|this\s+|my\s+|a\s+|an\s+)?/;
 
 function parseRelation(t, scene) {
   const m = REL_RE.exec(t);
@@ -1512,7 +1515,7 @@ function details(o) {
 
 /* ── Editing existing objects ──────────────────────────────────────────────── */
 
-const EDIT_RE = /\b(make|turn|change|paint|colou?r|recolou?r|dye|tint|move|shift|nudge|push|slide|raise|lift|lower|sink|resize|scale|grow|shrink|enlarge|expand|rotate|tilt|flip|delete|remove|erase|destroy|duplicate|clone|copy|stretch|squash|flatten|set|give|apply|swap|replace|morph|convert|transform|spin|bounce|pulse|wobble|orbit|shake|swing|tumble|hover|fade|blink|glow|stop|freeze|put|place|bring|send|align|center|centre|hide|rename|say|speed|slow|bigger|smaller|taller|shorter|wider|thinner|faster|slower|metallic|shiny|matte|transparent|wireframe|textured|striped|checkered|spotted|animate|float|drift|jump|hop|roll|shimmer|cycle|trash|kill|eliminate)\b/;
+const EDIT_RE = /\b(make|turn|change|paint|colou?r|recolou?r|dye|tint|move|shift|nudge|push|slide|raise|lift|lower|sink|resize|scale|grow|shrink|enlarge|expand|rotate|tilt|flip|delete|remove|erase|destroy|duplicate|clone|copy|stretch|squash|flatten|set|give|apply|swap|replace|morph|convert|transform|spin|bounce|pulse|wobble|orbit|shake|swing|tumble|hover|fade|blink|glow|stop|freeze|put|place|bring|send|align|center|centre|hide|rename|say|speed|slow|bigger|smaller|taller|shorter|wider|thinner|faster|slower|metallic|shiny|matte|transparent|wireframe|textured|striped|checkered|spotted|animate|float|drift|jump|hop|roll|shimmer|cycle|trash|kill|eliminate|get rid|take away)\b/;
 const REF_RE = /\b(it|them|that|this|those|these|the|my|all|every|each|everything|first|second|third|fourth|fifth|sixth|last|previous|latest|newest|oldest)\b|#\d+|\bobject\s+\d+\b/;
 const INDEF_RE = /\b(?:make|create|build|put|place|drop|bring|give me|show me)\s+(?:me\s+)?(?:a|an|some|\d+|two|three|four|five|six|seven|eight|nine|ten|twelve|dozen)\b/;
 
@@ -1565,7 +1568,7 @@ function runEdit(scene, t, orig) {
   const objs = scene.objects;
   // "turn the cube into a sphere": split at the shape change
   let body = t, shapeNew = null;
-  const ch = /\b(?:turn|change|morph|convert|transform|swap|replace)\b/.test(t) && /\b(?:into|to be|to a|to an|with a|with an|as a|as an|becomes?)\b/.exec(t);
+  const ch = /\b(?:turn|change|morph|convert|transform|swap|replace)\b/.test(t) && /\b(?:into|to be|to a|to an|with a|with an|as a|as an|becomes?|for a|for an|for the)\b/.exec(t);
   if (ch) { const after = t.slice(ch.index), ss = findShapes(after); if (ss.length) { shapeNew = ss[0].shape; body = t.slice(0, ch.index); } }
   const neuText = shapeNew ? t.slice(ch.index) : null;
 
@@ -1596,7 +1599,8 @@ function runEdit(scene, t, orig) {
   else if ((m = opsText.match(/\b([\d.]+)\s*(?:x|times)\b/)) || (m = opsText.match(/\bby\s+(?:a\s+factor\s+of\s+)?([\d.]+)\b/))) {
     const f = num(m[1]); if (f > 0) { ops.mul = /\b(smaller|shrink|reduce|decrease|scale down|shorter)\b/.test(opsText) ? 1 / f : f; tags.push(`×${ops.mul.toFixed(2)}`); }
   } else if (/\b(twice|double|doubled)\b.*\b(big|large|size|bigger|larger)\b|\bdouble (?:the )?size\b/.test(opsText)) { ops.mul = 2; tags.push('doubled'); }
-  else if (/\bhalf\b.*\b(size|big|small|as)\b|\bhalve\b/.test(opsText)) { ops.mul = 0.5; tags.push('halved'); }
+  else if (/\b(triple|tripled)\b/.test(opsText)) { ops.mul = 3; tags.push('tripled'); }
+  else if (/\bhalf\b.*\b(size|big|small|as)\b|\bhalve\b|\b(?:by|to|in)\s+half\b/.test(opsText)) { ops.mul = 0.5; tags.push('halved'); }
   else if (/\b(bigger|larger|enlarge|grow|increase|expand|inflate|scale up|blow up|magnify|boost)\b/.test(opsText)) {
     ops.mul = /\b(much|way|a lot|far|significantly|so much|huge amount)\b/.test(opsText) ? 2 : /\b(a bit|slightly|a little|somewhat|little)\b/.test(opsText) ? 1.15 : 1.4; tags.push('bigger');
   } else if (/\b(smaller|shrink|reduce|decrease|scale down|diminish|shrunk|minimi[sz]e)\b/.test(opsText)) {
@@ -1623,6 +1627,8 @@ function runEdit(scene, t, orig) {
   else if (pairTex && spansNew.length >= 2) { ops.color = { rgb: spansNew[0].rgb, name: spansNew[0].name }; style.color2 = spansNew[1].rgb; }
   else if (spansNew.length) { const sp = spansNew[spansNew.length - 1]; ops.color = { rgb: sp.rgb, name: sp.name }; }
   if (ops.color) tags.push(ops.color.name);
+  const cc = !ops.color && /\b(make|paint|colou?r|turn|dye|tint|change)\b/.test(opsText) && opsText.match(/\b(?:(?:the\s+)?same colou?r as|colou?r of|colou?red like|like|matching|match)\s+(?:the\s+|that\s+)?(.+)$/);
+  if (cc) { const rt = resolveTargets(cc[1], scene), ref = rt.idx.length ? objs[lastOf(rt.idx)] : null; if (ref && !targets.includes(ref)) { ops.color = { rgb: [...ref.color], name: ref.colorName }; tags.push(ref.colorName); } }
   if (Object.keys(style).length) { ops.style = style; tags.push(...[style.finish, style.texture, style.wire ? 'wireframe' : null, style.transparency > 0 ? 'transparent' : null].filter(Boolean)); }
 
   // rotation
@@ -1641,7 +1647,11 @@ function runEdit(scene, t, orig) {
   if (targets.some((o) => o.shape === 'text')) { const tx = extractText(orig); if (tx) { ops.text = tx; tags.push('text'); } }
 
   // movement
-  const mv = parseMove(opsText, rel && !tg.idx.includes(objs.indexOf(rel.ref)) ? rel : null);
+  let mv = parseMove(opsText, rel && !tg.idx.includes(objs.indexOf(rel.ref)) ? rel : null);
+  if (!mv || !mv.relation) {
+    const mw = opsText.match(/\b(?:to|onto)\s+(?:where\s+|the\s+(?:same\s+)?(?:place|spot|position|location)\s+(?:of|as)\s+)(?:the\s+)?(.+?)(?:\s+is)?$/);
+    if (mw) { const rt = resolveTargets(mw[1], scene), ref = rt.idx.length ? objs[lastOf(rt.idx)] : null; if (ref && !targets.includes(ref)) mv = { abs: [...ref.position] }; }
+  }
   if (mv) { ops.move = mv; tags.push(mv.relation ? REL_WORDS[mv.relation.rel] + ' ' + describe(mv.relation.ref) : 'moved'); }
 
   if (!tags.length && !dup) return { handled: false, noop: true };
@@ -1680,6 +1690,7 @@ function runEdit(scene, t, orig) {
       else if (ops.move.relation) o.position = relPos(ops.move.relation.ref, ops.move.relation.rel, o.size);
     }
   }
+  scene._focus = targets[targets.length - 1];
   const names = targets.length === 1 ? `the ${describe(targets[0])}` : `${targets.length} objects`;
   return { handled: true, result: { status: 'success', message: `${dup ? 'Duplicated' : 'Updated'} ${names}${dup ? '' : ': ' + [...new Set(tags)].join(', ')}.` } };
 }
@@ -1726,6 +1737,7 @@ function runAdd(scene, t, orig) {
     setAnims(o, an.types, an.speed, an.dir);
     scene.objects.push(o);
   }
+  scene._focus = scene.objects[scene.objects.length - 1];
   const extras = [style.finish, style.texture, style.wire ? 'wireframe' : null, style.transparency ? 'transparent' : null, ...an.types].filter(Boolean);
   const what = `${cname} ${count > 1 ? pluralOf(shapeLabel(shape)) : shapeLabel(shape)}${text ? ` "${text}"` : ''}`;
   const where = count > 1 ? (arrangement === 'random' ? 'scattered' : `in a ${arrangement}`) : `at ${fmtPos(position)}`;
@@ -1744,7 +1756,7 @@ const HELP = [
   'EDIT: make it bigger/taller/blue/metallic · paint the sphere green · move the cube up 2 · rotate it 45 degrees · turn the cone into a pyramid · duplicate / delete the red cube · undo / redo',
   'ANIMATE: spin bounce pulse wobble orbit hover shake flip swing tumble fade color-cycle (slowly / fast / backwards) · stop',
   'SPATIAL: a cone between the cube and the sphere · surround the sphere with 6 cubes · put it on the ground · arrange them in a circle · mirror the cone · make the biggest/leftmost one gold',
-  'ASK: where is the cube · what color is bob · how many red cubes · what\'s next to the sphere · keep only the cube · remove everything except bob · color them all different colors',
+  'ASK: where is the cube · what color is bob · how many red cubes · how big is the sphere · is there a cone · what\'s next to the sphere · keep only the cube · remove everything except bob · color them all different colors',
   'FLOW: chain with "then"/"and" (add a red cube then put a blue sphere on top of it) · name things (a cube called bob → move bob up) · another one / two more · twice as big as the cube',
   'SCENES: build a forest / village / city / solar system / campfire · make it spooky / cozy / underwater / winter / desert / alien / dreamy / cyberpunk',
   'WORLD: add ground / grass / water / grid floor · fog · sunset sky · night sky with stars · shadows · axes · day / night / neon · look at the cube · top view',
@@ -1769,7 +1781,7 @@ const NEXT_OK = /^(?:then\s+|also\s+)?(?:add|make|put|place|create|build|give|se
 
 /** "add a cube, then make it red and put a sphere on top of it" → three clauses. */
 function splitClauses(text) {
-  let parts = text.split(/\s*(?:;|\.\s+(?=[a-z])|\band then\b|,?\s*\bthen\b|\bafter that\b|\bnext,?\s+(?=[a-z]))\s*/i).map((s) => s.trim().replace(/[.!]+$/, '')).filter(Boolean);
+  let parts = text.split(/\s*(?:;|\.\s+(?=[a-z])|\band then\b|,?\s*\bthen\b|\bafter that\b|\bnext,\s+(?=[a-z])|\bnext\s+(?=(?:add|make|put|place|create|move|turn|paint|spin|rotate|delete|remove)\b))\s*/i).map((s) => s.trim().replace(/[.!]+$/, '')).filter(Boolean);
   const out = [];
   for (const p of parts) {
     const bits = p.split(/\s*(?:,\s*and\s+|\s+and\s+|,\s+(?=(?:add|make|put|place|move|turn|paint|spin|rotate)\b))/i);
@@ -1859,6 +1871,9 @@ function runScenery(scene, t) {
 /* ── Spatial, query and group commands ── */
 const lastOf = (a) => a[a.length - 1];
 const HELPSET = 'Try: where is the cube · what color is the sphere · how many red cubes';
+const INSPECT_RE = /^what (?:shapes|objects|things|stuff)\b.*\b(?:do i have|are there|is there|are here|is here|exist)\b|^(?:list|show)\s+(?:me\s+)?(?:all\s+)?(?:the\s+)?(?:shapes|objects)\b/;
+const QUESTION_RE = /^(?:how|what|which|where|why|who|when|is|are|does|do|did|can|could|would|should|will)\b/;
+const QUESTION_HELP = 'That sounds like a question, so I did not change the scene. I can answer: where is the cube · what color is the sphere · how big is the sphere · how many red cubes · is there a cone · what is in the scene';
 function settleOnGround(scene, objs) {
   const others = scene.objects.filter((o) => !objs.includes(o));
   const sy = (o) => o.size * (o.stretch ? o.stretch[1] : 1) * 1.02;
@@ -1872,7 +1887,10 @@ function runSpecial(scene, t) {
   const info = (message) => ({ status: 'info', message }), ok = (message) => ({ status: 'success', message });
   let m;
   // questions
+  if (!O.length && /^(?:is|are) there\b/.test(tl)) return info('No. The scene is empty.');
   if (O.length) {
+    if ((m = tl.match(/^how (?:big|large|small|tall|wide) (?:is|are) (?:the\s+)?(.+)$/))) { const tg = resolveTargets(m[1], scene); if (tg.idx.length) return info(tg.idx.map((i) => `The ${shapeLabel(O[i].shape)}${O[i].name ? ' "' + O[i].name + '"' : ''} is size ${O[i].size.toFixed(2)}.`).join('\n')); }
+    if ((m = tl.match(/^(?:is|are) there\s+(?:a|an|any|some)?\s*(.+)$/)) && (findShapes(m[1]).length || findColors(m[1]).length)) { const tg = resolveTargets('all ' + m[1], scene); return info(tg.idx.length ? `Yes. There ${tg.idx.length === 1 ? 'is 1' : 'are ' + tg.idx.length}: ${tg.idx.map((i) => describe(O[i])).join(', ')}.` : 'No.'); }
     if ((m = tl.match(/^(?:where(?:'s| is| are)|locate)\s+(?:the\s+)?(.+)$/))) { const tg = resolveTargets(m[1], scene); if (tg.idx.length) return info(tg.idx.map((i) => `${describe(O[i])}${O[i].name ? ' "' + O[i].name + '"' : ''} is at ${fmtPos(O[i].position)}`).join('\n')); }
     if ((m = tl.match(/^what(?:'s| is)?\s+(?:the\s+)?(colou?r|size)\s+(?:of|is)\s+(?:the\s+)?(.+)$/) || tl.match(/^what colou?r (?:is|are)\s+(?:the\s+)?(.+)$/))) {
       const what = m.length > 2 ? m[1][0] === 's' ? 'size' : 'color' : 'color', tg = resolveTargets(m[m.length - 1], scene);
@@ -1945,6 +1963,8 @@ function runSpecial(scene, t) {
 /** One clause: names, "another one", typo recovery, then the normal engine. */
 function runOne(scene, text) {
   let t = text.trim(), tl = t.toLowerCase();
+  const sb = tl.match(/^(?:(?:i think|i want|i'd like|i would like)\s+)?(?:the\s+|my\s+)?(.+?)\s+(?:should|must|needs? to|ought to|has to)\s+(?:be|become)\s+(.+)$/);
+  if (sb && scene.objects.length) { t = 'make the ' + sb[1] + ' ' + sb[2]; tl = t.toLowerCase(); }
   const sp = runSpecial(scene, tl); if (sp) return sp;
   const nc = tl.match(/^(?:please\s+)?(?:call|name|rename)\s+(it|that|this|them|the [\w ]+?)\s+(?:as\s+|to\s+)?(?:the\s+)?["“']?([a-z][\w-]*)["”']?$/);
   if (nc && scene.objects.length) {
@@ -1964,7 +1984,7 @@ function runOne(scene, text) {
   }
   const before = scene.objects.length;
   let r = execute(scene, t);
-  if (r.status === 'info' && /Not sure what shape/.test(r.message)) {
+  if (r.status === 'info' && /Not sure what shape/.test(r.message) && /\b(add|create|make|put|place|give|want|need|like|build|draw|generate|spawn|insert|show)\b/.test(tl)) {
     const fx = fixTypos(tl);
     if (fx.fixes.length) { const r2 = execute(scene, fx.text); if (r2.status === 'success') r = { ...r2, message: `(read ${fx.fixes.join(', ')}) ` + r2.message }; }
   }
@@ -1986,6 +2006,14 @@ function execute(scene, text) {
     return ok('Loaded the starter scene. Try: make the cube red · spin the cone · add fog · undo');
   }
   if (/\bredo\b/.test(t)) return scene.redo() ? ok('Redone.', { noHistory: true }) : info('Nothing to redo.');
+
+  const so = t.match(/^(?:please\s+)?(?:start over|start again|start fresh|begin again|new scene|clear everything|reset everything)(?:\s+(?:with|and add|and make)\s+(.+))?$/);
+  if (so) {
+    scene.reset();
+    if (!so[1]) return ok('Scene cleared.');
+    const r0 = execute(scene, 'add ' + so[1]);
+    return r0.status === 'success' ? ok('Started over. ' + r0.message) : r0;
+  }
 
   const shapesInText = findShapes(t);
   if (has(t, DATA.CLEAR_PHRASES) && !shapesInText.length && !ENV_WORD_RE.test(t) && !/\b(first|second|third|last|it|that|this)\b/.test(t)) { scene.reset(); return ok('Scene cleared.'); }
@@ -2021,7 +2049,7 @@ function execute(scene, text) {
     return ok(`Removed last shape (${shapeLabel(gone.shape)}).`);
   }
 
-  if (has(t, DATA.INSPECT_PHRASES) && !shapesInText.length) {
+  if ((has(t, DATA.INSPECT_PHRASES) || INSPECT_RE.test(t)) && !shapesInText.length) {
     const env = [scene.ground && 'ground', scene.fog && 'fog', scene.stars && 'stars', scene.axes && 'axes', scene.shadows && 'shadows'].filter(Boolean);
     if (!scene.objects.length) return info('Scene is empty — no objects yet.' + (env.length ? ` Environment: ${env.join(', ')}.` : ''));
     return ok(`${scene.objects.length} object(s):\n` + scene.objects.map((o, i) => `${i + 1}. ${describe(o)}${details(o)} at ${fmtPos(o.position)}`).join('\n') + (env.length ? `\nEnvironment: ${env.join(', ')}.` : ''));
@@ -2048,6 +2076,7 @@ function execute(scene, text) {
   }
 
   if (noop) return info("I found the object but wasn't sure what to change. Try: bigger, red, metallic, move up, spin, delete.");
+  if (QUESTION_RE.test(t) && !/\b(add|create|make|build|put|place|give|spawn|insert|draw|generate|show me|paint|turn|move|delete|remove)\b/.test(t)) return info(QUESTION_HELP);
   return runAdd(scene, t, orig);
 }
 
