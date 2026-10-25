@@ -215,7 +215,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span style="opacity:.6">(build 2026-10-24a)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-25a)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -1515,21 +1515,21 @@ function details(o) {
 
 /* ── Editing existing objects ──────────────────────────────────────────────── */
 
-const EDIT_RE = /\b(make|turn|change|paint|colou?r|recolou?r|dye|tint|move|shift|nudge|push|slide|raise|lift|lower|sink|resize|scale|grow|shrink|enlarge|expand|rotate|tilt|flip|delete|remove|erase|destroy|duplicate|clone|copy|stretch|squash|flatten|set|give|apply|swap|replace|morph|convert|transform|spin|bounce|pulse|wobble|orbit|shake|swing|tumble|hover|fade|blink|glow|stop|freeze|put|place|bring|send|align|center|centre|hide|rename|say|speed|slow|bigger|smaller|taller|shorter|wider|thinner|faster|slower|metallic|shiny|matte|transparent|wireframe|textured|striped|checkered|spotted|animate|float|drift|jump|hop|roll|shimmer|cycle|trash|kill|eliminate|get rid|take away)\b/;
+const EDIT_RE = /\b(make|turn|change|paint|colou?r|recolou?r|dye|tint|move|shift|nudge|push|slide|raise|lift|lower|sink|resize|scale|grow|shrink|enlarge|expand|rotate|tilt|flip|delete|remove|erase|destroy|duplicate|clone|copy|stretch|squash|flatten|set|give|apply|swap|replace|morph|convert|transform|spin|bounce|pulse|wobble|orbit|shake|swing|tumble|hover|fade|blink|glow|stop|freeze|put|place|bring|send|align|center|centre|hide|rename|say|speed|slow|bigger|smaller|taller|shorter|wider|thinner|faster|slower|metallic|shiny|matte|transparent|wireframe|textured|striped|checkered|spotted|animate|float|drift|jump|hop|roll|shimmer|cycle|trash|kill|eliminate|get rid|take away|discard|ditch|dispose|take out|lose|wipe out|clear|inflate|boost|magnify|increase|blow up|double|triple|halve|reduce|decrease|diminish|minimi[sz]e|relocate|scoot|shove|carry|switch|repaint)\b/;
 const REF_RE = /\b(it|them|that|this|those|these|the|my|all|every|each|everything|first|second|third|fourth|fifth|sixth|last|previous|latest|newest|oldest)\b|#\d+|\bobject\s+\d+\b/;
-const INDEF_RE = /\b(?:make|create|build|put|place|drop|bring|give me|show me)\s+(?:me\s+)?(?:a|an|some|\d+|two|three|four|five|six|seven|eight|nine|ten|twelve|dozen)\b/;
+const INDEF_RE = /\b(?:make|create|build|put|place|drop|bring|give me|show me)\s+(?:me\s+)?(?:a|an|one|some|\d+|two|three|four|five|six|seven|eight|nine|ten|twelve|dozen)\b/;
 
 function wantsEdit(t, scene) {
   if (!scene.objects.length) return false;
-  if (/\b(add|spawn|summon|generate|insert|another|new)\b/.test(t)) return false;
+  if (/\b(add|spawn|summon|generate|insert|another|new|set up)\b/.test(t)) return false;
   if (INDEF_RE.test(t)) return false;
-  return EDIT_RE.test(t) && (REF_RE.test(t) || scene.objects.some((o) => o.name && wordRe(o.name).test(t)));
+  return EDIT_RE.test(t) && (REF_RE.test(t) || scene.objects.some((o) => o.name && wordRe(o.name).test(t)) || (findShapes(t).some((sh) => scene.objects.some((o) => o.shape === sh.shape)) && !findShapes(t).some((sh) => INDEF_BEFORE.test(t.slice(0, sh.i)))));
 }
 
 const DIRS = { up: [0, 1, 0], upward: [0, 1, 0], upwards: [0, 1, 0], higher: [0, 1, 0], down: [0, -1, 0], downward: [0, -1, 0], downwards: [0, -1, 0], lower: [0, -1, 0], left: [-1, 0, 0], leftward: [-1, 0, 0], leftwards: [-1, 0, 0], right: [1, 0, 0], rightward: [1, 0, 0], rightwards: [1, 0, 0], forward: [0, 0, 1], forwards: [0, 0, 1], closer: [0, 0, 1], nearer: [0, 0, 1], back: [0, 0, -1], backward: [0, 0, -1], backwards: [0, 0, -1], away: [0, 0, -1] };
 const POS_KEYS = Object.keys(DATA.POSITIONS).sort((a, b) => b.length - a.length);
 const ABS_POS_RE = new RegExp(`\\b(?:to|at|on|in|into)\\s+(?:the\\s+)?(${POS_KEYS.map(esc).join('|')})\\b`);
-const MOVE_VERB_RE = /\b(move|shift|nudge|push|slide|raise|lift|lower|sink|send|bring|put|place|set|position|translate|shove|pull|drag|carry|elevate|drop|go)\b/;
+const MOVE_VERB_RE = /\b(move|shift|nudge|push|slide|raise|lift|lower|sink|send|bring|put|place|set|position|translate|shove|pull|drag|carry|elevate|drop|go|relocate|scoot)\b/;
 
 function parseMove(t, rel) {
   t = t.replace(/\bupside[- ]down\b/g, ' ');
@@ -1537,7 +1537,8 @@ function parseMove(t, rel) {
   const c = t.match(COORD_RE);
   if (c) return { abs: [num(c[1]), num(c[2]), num(c[3])] };
   const a = t.match(ABS_POS_RE);
-  if (a && MOVE_VERB_RE.test(t)) return { abs: [...DATA.POSITIONS[a[1]]] };
+  const dirOnly = a && DIRS[a[1]] && new RegExp('\\bto\\s+(?:the\\s+)?' + esc(a[1]) + '\\b').test(t);
+  if (a && !dirOnly && MOVE_VERB_RE.test(t)) return { abs: [...DATA.POSITIONS[a[1]]] };
   if (!MOVE_VERB_RE.test(t)) return null;
   const v = [0, 0, 0];
   let hit = false;
@@ -1585,7 +1586,7 @@ function runEdit(scene, t, orig) {
   const ops = {}, tags = [];
   let targets = tg.idx.map((i) => objs[i]);
 
-  if (/\b(delete|remove|erase|destroy|get rid of|take away|trash|kill|eliminate|dispose of)\b/.test(t)) {
+  if (/\b(delete|remove|erase|destroy|get rid of|take away|trash|kill|eliminate|dispose of|discard|ditch|take out|wipe out|lose)\b|\bclear\s+(?:the|that|this|those|these|all|every)\b/.test(t)) {
     const drop = new Set(tg.idx);
     const names = targets.map(describe);
     scene.objects = objs.filter((_, i) => !drop.has(i));
@@ -1599,6 +1600,7 @@ function runEdit(scene, t, orig) {
   else if ((m = opsText.match(/\b([\d.]+)\s*(?:x|times)\b/)) || (m = opsText.match(/\bby\s+(?:a\s+factor\s+of\s+)?([\d.]+)\b/))) {
     const f = num(m[1]); if (f > 0) { ops.mul = /\b(smaller|shrink|reduce|decrease|scale down|shorter)\b/.test(opsText) ? 1 / f : f; tags.push(`×${ops.mul.toFixed(2)}`); }
   } else if (/\b(twice|double|doubled)\b.*\b(big|large|size|bigger|larger)\b|\bdouble (?:the )?size\b/.test(opsText)) { ops.mul = 2; tags.push('doubled'); }
+  else if (/\bdouble\b/.test(opsText)) { ops.mul = 2; tags.push('doubled'); }
   else if (/\b(triple|tripled)\b/.test(opsText)) { ops.mul = 3; tags.push('tripled'); }
   else if (/\bhalf\b.*\b(size|big|small|as)\b|\bhalve\b|\b(?:by|to|in)\s+half\b/.test(opsText)) { ops.mul = 0.5; tags.push('halved'); }
   else if (/\b(bigger|larger|enlarge|grow|increase|expand|inflate|scale up|blow up|magnify|boost)\b/.test(opsText)) {
@@ -1760,6 +1762,7 @@ const HELP = [
   'FLOW: chain with "then"/"and" (add a red cube then put a blue sphere on top of it) · name things (a cube called bob → move bob up) · another one / two more · twice as big as the cube',
   'SCENES: build a forest / village / city / solar system / campfire · make it spooky / cozy / underwater / winter / desert / alien / dreamy / cyberpunk',
   'WORLD: add ground / grass / water / grid floor · fog · sunset sky · night sky with stars · shadows · axes · day / night / neon · look at the cube · top view',
+  'CHECK: selftest (runs the built-in phrase checks) · vocab (every verb it knows) · misses (phrases it did not understand) · version',
 ].join('\n');
 
 /** Built from ordinary commands, so it doubles as a demo of the vocabulary. Kept within ±3.4 x / ±3 y so it fits any screen shape, and free of Text nodes so the first paint needs no font downloads. */
@@ -1872,6 +1875,7 @@ function runScenery(scene, t) {
 const lastOf = (a) => a[a.length - 1];
 const HELPSET = 'Try: where is the cube · what color is the sphere · how many red cubes';
 const INSPECT_RE = /^what (?:shapes|objects|things|stuff)\b.*\b(?:do i have|are there|is there|are here|is here|exist)\b|^(?:list|show)\s+(?:me\s+)?(?:all\s+)?(?:the\s+)?(?:shapes|objects)\b/;
+const INDEF_BEFORE = /\b(?:a|an|one|some|another|\d+|two|three|four|five|six|seven|eight|nine|ten|dozen)\s+(?:[a-z-]+\s+){0,3}$/;
 const QUESTION_RE = /^(?:how|what|which|where|why|who|when|is|are|does|do|did|can|could|would|should|will)\b/;
 const QUESTION_HELP = 'That sounds like a question, so I did not change the scene. I can answer: where is the cube · what color is the sphere · how big is the sphere · how many red cubes · is there a cone · what is in the scene';
 function settleOnGround(scene, objs) {
@@ -1889,6 +1893,10 @@ function runSpecial(scene, t) {
   // questions
   if (!O.length && /^(?:is|are) there\b/.test(tl)) return info('No. The scene is empty.');
   if (O.length) {
+    if ((m = tl.match(/^(?:tell me about|describe|what about)\s+(?:the\s+)?(.+)$/))) { const tg = resolveTargets(m[1], scene); if (tg.idx.length) return info(tg.idx.map((i) => `${describe(O[i])}${details(O[i])}, size ${O[i].size.toFixed(2)}, at ${fmtPos(O[i].position)}`).join('\n')); }
+    if ((m = tl.match(/^(?:does|is)\s+(?:the\s+)?(.+?)\s+(?:(?:currently|now)\s+)?(\w+)$/))) { const rec = ANIM_RES.find(([, re]) => re.test(m[2])); if (rec) { const tg = resolveTargets(m[1], scene); if (tg.idx.length) return info(tg.idx.map((i) => { const on = O[i].anims.some((a) => a.type === rec[0]); return `${on ? 'Yes' : 'No'}, the ${describe(O[i])} ${on ? 'is' : 'is not'} set to ${rec[0]}.`; }).join('\n')); } }
+    if ((m = tl.match(/^(?:is|are)\s+(?:the\s+)?(.+?)\s+([a-z ]+)$/))) { const cs = findColors(m[2]); if (cs.length && cs[0].i === 0 && cs[0].j === m[2].length) { const tg = resolveTargets(m[1], scene); if (tg.idx.length) return info(tg.idx.map((i) => `${colorMatch(O[i], cs[0]) ? 'Yes' : 'No'}, the ${shapeLabel(O[i].shape)} is ${O[i].colorName}.`).join('\n')); } }
+    if ((m = tl.match(/^(double|triple|quadruple)\s+(?:the\s+)?number\s+of\s+(.+)$/))) { const f = { double: 2, triple: 3, quadruple: 4 }[m[1]], tg = resolveTargets('all ' + m[2], scene); if (tg.idx.length) { const base = tg.idx.map((i) => O[i]); let added = 0; for (let r = 1; r < f; r++) for (const o of base) { const c = cloneObj(o); delete c.name; c.position = [o.position[0], o.position[1], o.position[2] + o.size * 2.4 * r]; O.push(c); added++; } return ok(`Added ${added} more (${f}x as many).`); } }
     if ((m = tl.match(/^how (?:big|large|small|tall|wide) (?:is|are) (?:the\s+)?(.+)$/))) { const tg = resolveTargets(m[1], scene); if (tg.idx.length) return info(tg.idx.map((i) => `The ${shapeLabel(O[i].shape)}${O[i].name ? ' "' + O[i].name + '"' : ''} is size ${O[i].size.toFixed(2)}.`).join('\n')); }
     if ((m = tl.match(/^(?:is|are) there\s+(?:a|an|any|some)?\s*(.+)$/)) && (findShapes(m[1]).length || findColors(m[1]).length)) { const tg = resolveTargets('all ' + m[1], scene); return info(tg.idx.length ? `Yes. There ${tg.idx.length === 1 ? 'is 1' : 'are ' + tg.idx.length}: ${tg.idx.map((i) => describe(O[i])).join(', ')}.` : 'No.'); }
     if ((m = tl.match(/^(?:where(?:'s| is| are)|locate)\s+(?:the\s+)?(.+)$/))) { const tg = resolveTargets(m[1], scene); if (tg.idx.length) return info(tg.idx.map((i) => `${describe(O[i])}${O[i].name ? ' "' + O[i].name + '"' : ''} is at ${fmtPos(O[i].position)}`).join('\n')); }
@@ -1965,6 +1973,12 @@ function runOne(scene, text) {
   let t = text.trim(), tl = t.toLowerCase();
   const sb = tl.match(/^(?:(?:i think|i want|i'd like|i would like)\s+)?(?:the\s+|my\s+)?(.+?)\s+(?:should|must|needs? to|ought to|has to)\s+(?:be|become)\s+(.+)$/);
   if (sb && scene.objects.length) { t = 'make the ' + sb[1] + ' ' + sb[2]; tl = t.toLowerCase(); }
+  const tb = tl.match(/^(?:the\s+|my\s+)?(.+?)\s+(?:is|are|looks?|seems?)\s+(?:a bit\s+|a little\s+|way\s+|much\s+|far\s+|so\s+)?too\s+(small|tiny|little|short|big|large|huge|tall)$/);
+  if (tb && scene.objects.length) { t = 'make the ' + tb[1] + (/small|tiny|little|short/.test(tb[2]) ? ' bigger' : ' smaller'); tl = t.toLowerCase(); }
+  const dn = tl.match(/^i\s+(?:don't|do not|dont|no longer)\s+(?:want|need|like)\s+(?:the|that|this|those|these)\s+(.+)$/);
+  if (dn && scene.objects.length) { t = 'delete the ' + dn[1]; tl = t.toLowerCase(); }
+  const iw = tl.match(/^i\s+(?:want|need|would like|'d like)\s+(?:the|my)\s+(.+)$/);
+  if (iw && scene.objects.length) { const cs = findColors(iw[1]); if (cs.length && cs[cs.length - 1].j === iw[1].length) { t = 'make the ' + iw[1]; tl = t.toLowerCase(); } }
   const sp = runSpecial(scene, tl); if (sp) return sp;
   const nc = tl.match(/^(?:please\s+)?(?:call|name|rename)\s+(it|that|this|them|the [\w ]+?)\s+(?:as\s+|to\s+)?(?:the\s+)?["“']?([a-z][\w-]*)["”']?$/);
   if (nc && scene.objects.length) {
@@ -2024,7 +2038,7 @@ function execute(scene, text) {
   for (const [view, phrases] of [['reset', DATA.CAM_RESET], ['top', DATA.CAM_TOP], ['front', DATA.CAM_FRONT], ['side', DATA.CAM_SIDE], ['iso', DATA.CAM_ISO], ['zoom_in', DATA.CAM_ZOOM_IN], ['zoom_out', DATA.CAM_ZOOM_OUT]]) {
     if (has(t, phrases)) { scene.viewpoint = VIEWPOINTS[view]; return ok(`Camera set to ${view.replace('_', ' ')} view.`); }
   }
-  const la = t.match(/\b(?:look at|focus on|focus|zoom to|zoom on|zoom into|center on|centre on|fly to|frame)\s+(?:the\s+)?(.+)$/);
+  const la = t.match(/\b(?:look at|focus on|focus|zoom to|zoom on|zoom into|center on|centre on|fly to|frame|show me the|take me to the)\s+(?:the\s+)?(.+)$/);
   if (la && scene.objects.length) {
     const tg = resolveTargets(la[1], scene);
     if (tg.idx.length) { const o = scene.objects[tg.idx[tg.idx.length - 1]], d = 4 + o.size * 3; scene.viewpoint = `<Viewpoint description="Focus" position="${f3(o.position[0])} ${f3(o.position[1])} ${f3(o.position[2] + d)}" orientation="0 1 0 0"/>`; return ok(`Camera focused on the ${describe(o)}.`); }
@@ -2034,6 +2048,9 @@ function execute(scene, text) {
 
   const skyWords = (/\b(sky|background|backdrop|starfield|galaxy)\b/.test(t) || (scene.stars && NEG_RE.test(t))) && shapesInText.every((s) => s.shape === 'star');
   if (!shapesInText.length || skyWords) { const env = parseEnv(t, scene); if (env) return ok(applyEnv(scene, env)); }
+
+  const qStart = /^(?:does|do|did|is|are|what|where|how|which|who|why|when|tell me|describe)\b/.test(t) || /^(?:can|could|would|will)\s+(?:you|i)\s+(?:tell|say)\b/.test(t);
+  if (qStart && (shapesInText.length || !(has(t, DATA.INSPECT_PHRASES) || INSPECT_RE.test(t)))) return info(QUESTION_HELP);
 
   let noop = false;
   if (wantsEdit(t, scene)) {
@@ -2076,6 +2093,8 @@ function execute(scene, text) {
   }
 
   if (noop) return info("I found the object but wasn't sure what to change. Try: bigger, red, metallic, move up, spin, delete.");
+  const addIntent = /\b(add|create|build|put|place|give|spawn|insert|draw|generate|show me|gimme|throw|toss|set up|want|need|get me|bring me)\b/.test(t) || shapesInText.some((sh) => INDEF_BEFORE.test(t.slice(0, sh.i)));
+  if (!addIntent && /\b(the|that|this|those|these)\b/.test(t) && shapesInText.some((sh) => scene.objects.some((o) => o.shape === sh.shape))) return info("I found that object but don't know that action. Try: make it bigger · move it up · paint it red · spin it · delete it");
   if (QUESTION_RE.test(t) && !/\b(add|create|make|build|put|place|give|spawn|insert|draw|generate|show me|paint|turn|move|delete|remove)\b/.test(t)) return info(QUESTION_HELP);
   return runAdd(scene, t, orig);
 }
@@ -2106,7 +2125,82 @@ function runCommand(scene, text) {
   return { status: ok.length ? 'success' : results[results.length - 1].status, message: lines.join('\n') };
 }
 
-return { DATA, Scene, runCommand, describe, details };
+/* ── Built-in phrasebook. The SAME lists drive "vocab" (what it knows) and "selftest" (proof that it works). ── */
+const PHRASEBOOK = {
+  add: ['add', 'create', 'make me', 'give me', 'put', 'place', 'spawn', 'drop in', 'I want', "I'd like", 'can you add', 'please add', 'throw in', 'insert', 'build', 'draw', 'generate', 'show me', 'toss in', 'set up', 'I need', "let's have", 'could you make', 'gimme'],
+  recolor: ['paint the {s} {c}', 'color the {s} {c}', 'colour the {s} {c}', 'turn the {s} {c}', 'make the {s} {c}', 'change the {s} to {c}', 'change the {s} color to {c}', 'tint the {s} {c}', 'dye the {s} {c}', 'recolor the {s} {c}', 'switch the {s} to {c}', 'the {s} should be {c}', 'I want the {s} {c}', 'set the {s} to {c}', 'make the {s} look {c}', 'repaint the {s} {c}', 'give the {s} a {c} color', 'the {s} needs to be {c}'],
+  delete: ['delete the {s}', 'remove the {s}', 'erase the {s}', 'destroy the {s}', 'get rid of the {s}', 'kill the {s}', 'trash the {s}', 'take away the {s}', 'discard the {s}', 'ditch the {s}', 'eliminate the {s}', 'dispose of the {s}', 'take out the {s}', "I don't want the {s}", 'lose the {s}', 'clear the {s}', 'wipe out the {s}', 'delete {s}', 'remove that {s}'],
+  bigger: ['make the {s} bigger', 'enlarge the {s}', 'grow the {s}', 'expand the {s}', 'scale up the {s}', 'inflate the {s}', 'increase the size of the {s}', 'blow up the {s}', 'make the {s} larger', 'make the {s} huge', 'make the {s} twice as big', 'double the {s}', 'boost the {s}', 'magnify the {s}', 'the {s} is too small', 'make the {s} a lot bigger', 'scale the {s} by 2', 'resize the {s} to size 2'],
+  smaller: ['make the {s} smaller', 'shrink the {s}', 'reduce the {s}', 'scale down the {s}', 'make the {s} tiny', 'make the {s} half the size', 'halve the {s}', 'decrease the {s}', 'the {s} is too big', 'make the {s} a bit smaller', 'diminish the {s}', 'minimize the {s}', 'make the {s} little'],
+  move: ['move the {s} {d}', 'shift the {s} {d}', 'nudge the {s} {d}', 'push the {s} {d}', 'slide the {s} {d}', 'shove the {s} {d}', 'send the {s} {d}', 'bring the {s} {d}', 'relocate the {s} {d}', 'move the {s} a bit {d}', 'move the {s} {d} 2 units', 'put the {s} {d}', 'scoot the {s} {d}', 'shift the {s} over {d}', 'move the {s} to the {d}', 'lift the {s} {d}', 'carry the {s} {d}'],
+  animate: ['make the {s} {a}', '{a} the {s}', 'let the {s} {a}', 'have the {s} {a}', 'the {s} should {a}', 'animate the {s} to {a}', 'make the {s} start to {a}', 'get the {s} to {a}'],
+  ask: ['what color is the {s}', 'where is the {s}', 'how big is the {s}', 'is there a {s}', 'do I have a {s}', 'how many {s}s are there', 'which one is the {s}', 'tell me about the {s}', 'what is the {s}', 'can you tell me where the {s} is', 'how tall is the {s}', 'what size is the {s}', 'is the {s} red', 'are there any {s}s', "what's the {s} doing", 'does the {s} spin', 'show me the {s}', 'where did the {s} go', 'how many objects are there', 'what do I have'],
+};
+const PB_ANIMS = ['spin', 'bounce', 'pulse', 'wobble', 'orbit', 'hover', 'shake', 'flip', 'swing', 'fade'];
+
+function vocab() {
+  const ex = (t) => t.replace(/\{s\}/g, 'sphere').replace(/\{c\}/g, 'pink').replace(/\{d\}/g, 'up').replace(/\{a\}/g, 'spin');
+  const P = PHRASEBOOK;
+  return [
+    'ADD (then a shape, e.g. "add a red sphere"): ' + P.add.join(' · '),
+    'RECOLOR: ' + P.recolor.map(ex).join(' · '),
+    'DELETE: ' + P.delete.map(ex).join(' · '),
+    'BIGGER: ' + P.bigger.map(ex).join(' · '),
+    'SMALLER: ' + P.smaller.map(ex).join(' · '),
+    'MOVE (up / down / left / right): ' + P.move.map(ex).join(' · '),
+    'ANIMATE (' + PB_ANIMS.join(' / ') + '): ' + P.animate.map(ex).join(' · '),
+    'ASK (never changes the scene): ' + P.ask.map(ex).join(' · '),
+    'Every phrase above is checked by "selftest". Anything it does not understand is saved under "misses".',
+  ].join('\n');
+}
+
+function selfTest() {
+  const t0 = Date.now();
+  const SUBJ = [['sphere', 0], ['cube', 1], ['cone', 2]];
+  const SEED = ['add a red sphere at -4 0 0', 'add a blue cube at -2 0 0', 'add a gold cone at 0 0 0', 'add a green cylinder at 2 0 0', 'add a purple torus at 4 0 0'];
+  const fresh = () => { const sc = new Scene(); SEED.forEach((c) => runCommand(sc, c)); return sc; };
+  const kind = (o) => (o.shape === 'box' ? 'cube' : o.shape);
+  const fill = (tpl, o) => tpl.replace(/\{s\}/g, o.s || '').replace(/\{c\}/g, o.c || '').replace(/\{d\}/g, o.d || '').replace(/\{a\}/g, o.a || '');
+  const cats = [];
+  const cat = (name, cases) => {
+    let pass = 0; const fails = [];
+    for (const [phrase, ok] of cases) {
+      const sc = fresh(), before = JSON.parse(JSON.stringify(sc.objects));
+      let r = null, good = false;
+      try { r = runCommand(sc, phrase); good = !!ok(sc, before); } catch (e) { r = { message: 'error: ' + e.message }; }
+      if (good) pass++; else if (fails.length < 3) fails.push(phrase + '  ->  ' + String(r && r.message).replace(/\n/g, ' | ').slice(0, 60));
+    }
+    cats.push({ name, pass, tot: cases.length, fails });
+  };
+  const P = PHRASEBOOK, cases = (list, fn) => list.flatMap((tpl) => fn(tpl));
+  cat('add', P.add.flatMap((v) => SUBJ.flatMap(([sh]) => ['red', 'gold'].map((c) => [`${v} a ${c} ${sh}`, (sc, b) => sc.objects.length === b.length + 1 && sc.objects[sc.objects.length - 1].colorName === c && kind(sc.objects[sc.objects.length - 1]) === sh]))));
+  cat('recolor', cases(P.recolor, (t) => SUBJ.flatMap(([sh, i]) => ['pink', 'teal'].map((c) => [fill(t, { s: sh, c }), (sc, b) => sc.objects[i].colorName === c && sc.objects.length === b.length]))));
+  cat('delete', cases(P.delete, (t) => SUBJ.map(([sh]) => [fill(t, { s: sh }), (sc, b) => sc.objects.length === b.length - 1 && !sc.objects.some((o) => kind(o) === sh)])));
+  cat('bigger', cases(P.bigger, (t) => SUBJ.map(([sh, i]) => [fill(t, { s: sh }), (sc, b) => sc.objects[i].size > b[i].size && sc.objects.length === b.length])));
+  cat('smaller', cases(P.smaller, (t) => SUBJ.map(([sh, i]) => [fill(t, { s: sh }), (sc, b) => sc.objects[i].size < b[i].size && sc.objects.length === b.length])));
+  const DIRS4 = [['up', 1, 1], ['down', 1, -1], ['left', 0, -1], ['right', 0, 1]];
+  cat('move', cases(P.move, (t) => SUBJ.flatMap(([sh, i]) => DIRS4.map(([d, ax, sg]) => [fill(t, { s: sh, d }), (sc, b) => (sc.objects[i].position[ax] - b[i].position[ax]) * sg > 0.01 && sc.objects.length === b.length]))));
+  cat('animate', cases(P.animate, (t) => PB_ANIMS.map((a, k) => [fill(t, { s: SUBJ[k % 3][0], a }), (sc, b) => sc.objects[SUBJ[k % 3][1]].anims.length > (b[SUBJ[k % 3][1]].anims || []).length && sc.objects.length === b.length])));
+  cat('ask', cases(P.ask, (t) => SUBJ.map(([sh]) => [fill(t, { s: sh }), (sc, b) => JSON.stringify(sc.objects) === JSON.stringify(b)])));
+  const core = [
+    ['undo and redo', () => { const sc = new Scene(); runCommand(sc, 'add a red sphere'); runCommand(sc, 'undo'); const a = sc.objects.length === 0; runCommand(sc, 'redo'); return a && sc.objects.length === 1; }],
+    ['"next to" places beside', () => { const sc = new Scene(); runCommand(sc, 'add a red sphere'); runCommand(sc, 'add a gold sphere next to the red sphere'); return sc.objects.length === 2 && sc.objects[1].position[0] > sc.objects[0].position[0]; }],
+    ['"it" follows the last mention', () => { const sc = new Scene(); runCommand(sc, 'add a red sphere'); runCommand(sc, 'add a blue cube'); runCommand(sc, 'make the sphere bigger'); runCommand(sc, 'make it green'); return sc.objects[0].colorName === 'green' && sc.objects[1].colorName === 'blue'; }],
+    ['named objects', () => { const sc = new Scene(); runCommand(sc, 'add a cube called bob'); runCommand(sc, 'move bob up'); return sc.objects[0].position[1] > 0; }],
+    ['corrupt save is rejected, scene kept', () => { const sc = new Scene(); runCommand(sc, 'add a red sphere'); return sc.restore({ objects: {} }) === false && sc.objects.length === 1; }],
+    ['start over with', () => { const sc = new Scene(); runCommand(sc, 'add a red sphere'); runCommand(sc, 'start over with a cube'); return sc.objects.length === 1 && kind(sc.objects[0]) === 'cube'; }],
+    ['unknown verb never adds', () => { const sc = new Scene(); runCommand(sc, 'add a red sphere'); runCommand(sc, 'flibber the sphere'); return sc.objects.length === 1; }],
+    ['chained clauses', () => { const sc = new Scene(); runCommand(sc, 'add a red cube then make it blue and move it up'); return sc.objects.length === 1 && sc.objects[0].colorName === 'blue' && sc.objects[0].position[1] > 0; }],
+  ];
+  cats.push((() => { let pass = 0; const fails = []; for (const [n, f] of core) { let ok = false; try { ok = !!f(); } catch (e) { ok = false; } if (ok) pass++; else fails.push(n); } return { name: 'core', pass, tot: core.length, fails }; })());
+  const pass = cats.reduce((a, c) => a + c.pass, 0), tot = cats.reduce((a, c) => a + c.tot, 0), ms = Date.now() - t0;
+  const lines = [`Self-test: ${pass}/${tot} passed (${(100 * pass / tot).toFixed(1)}%) in ${ms} ms`, cats.map((c) => `${c.name} ${c.pass}/${c.tot}`).join(' · ')];
+  const bad = cats.filter((c) => c.fails.length);
+  if (bad.length) { lines.push('Failures:'); bad.forEach((c) => c.fails.forEach((f) => lines.push(` - [${c.name}] ${f}`))); } else lines.push('Nothing failed.');
+  return lines.join('\n');
+}
+
+return { DATA, Scene, runCommand, describe, details, vocab, selfTest };
 })();
 
 /* ═══ Kähler surface generators ═══ */
@@ -2465,6 +2559,41 @@ async function loadArchive(key) {
   }
 }
 
+const STORE_MISS = 'x3d-studio:misses';
+const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
+const CHANGELOG = [
+  '2026-10-25a  selftest, vocab, misses log and version commands',
+  '2026-10-24b  many more verbs (ditch, inflate, scoot...), questions never edit the scene, unknown verbs no longer add objects',
+  '2026-10-24a  "next to" fixed, "it" follows the last object, start over, same color as, move to where',
+  '2026-10-23a  corrupt saves can no longer break loading; SRI check removed',
+];
+function noteMiss(text, r) {
+  if (!MISS_RE.test(String(r.message || ''))) return;
+  const raw = readJSON(STORE_MISS, []), arr = Array.isArray(raw) ? raw : [], key = text.trim().toLowerCase(), hit = arr.find((m) => m && m.p === key);
+  if (hit) hit.n = (hit.n || 1) + 1; else arr.push({ p: key, n: 1 });
+  writeJSON(STORE_MISS, arr.slice(-60));
+}
+function missesText() {
+  const raw = readJSON(STORE_MISS, []), arr = Array.isArray(raw) ? raw : [];
+  if (!arr.length) return 'No missed phrases logged yet. Anything the app does not understand is saved here automatically.';
+  return arr.length + ' phrase(s) it did not understand (paste this list to Claude to get them fixed):\n' + arr.map((m, i) => `${i + 1}. ${m.p}${m.n > 1 ? '  (x' + m.n + ')' : ''}`).join('\n');
+}
+/** Commands about the app itself. They never touch the scene. */
+function metaCommand(text) {
+  const tl = text.trim().toLowerCase().replace(/[?!.]+$/, '');
+  if (/^(?:self[- ]?test|run (?:the )?(?:self[- ]?)?tests?|test yourself|check yourself)$/.test(tl)) return { label: 'Self-test', message: Agent.selfTest() };
+  if (/^(?:vocab|vocabulary|list (?:the )?(?:verbs|words|commands)|what words do you (?:know|understand))$/.test(tl)) return { label: 'Vocabulary', message: Agent.vocab() };
+  if (/^(?:misses|missed phrases|show misses|what did you miss|unrecognized phrases)$/.test(tl)) return { label: 'Misses', message: missesText() };
+  if (tl === 'clear misses') { writeJSON(STORE_MISS, []); return { label: 'Misses', message: 'Cleared.' }; }
+  if (tl === 'copy misses') {
+    const txt = missesText();
+    try { if (navigator.clipboard) navigator.clipboard.writeText(txt).catch(() => {}); } catch (e) { /* clipboard is best-effort */ }
+    return { label: 'Misses', message: txt + '\n(Copied if your browser allows it; otherwise select the text above.)' };
+  }
+  if (/^(?:version|changelog|what version(?: is this)?)$/.test(tl)) return { label: 'Version', message: (($('buildTag') || {}).textContent || '').replace(/[()]/g, '') + '\n' + CHANGELOG.join('\n') };
+  return null;
+}
+
 async function run(override) {
   const text = (override ?? inp.value).trim();
   if (!text) return;
@@ -2472,8 +2601,11 @@ async function run(override) {
   inp.value = '';
   runBtn.disabled = true;
   try {
+    const meta = metaCommand(text);
+    if (meta) { addLog('info', meta.label, meta.message); return; }
     let r = Agent.runCommand(scene, text);
     if (r.status === 'pending') r = await loadArchive(r.archiveKey);
+    noteMiss(text, r);
     addLog(r.status === 'success' ? 'ai' : r.status === 'error' ? 'error' : 'info', r.status === 'error' ? 'Error' : 'Scene', r.message);
     if (r.status === 'success') render();
   } catch (e) { addLog('error', 'Error', e.message); }
@@ -2498,7 +2630,7 @@ const CHIPS = [
   ['Lighting', 'green', [['day', 'day'], ['night', 'night'], ['sunrise', 'sunrise'], ['neon', 'neon lights'], ['brighter', 'brighter'], ['dimmer', 'dimmer'], ['spotlight', 'add spotlight'], ['remove spots', 'remove spotlights']]],
   ['Camera', '', [['reset', 'reset camera'], ['top', 'top view'], ['front', 'front view'], ['side', 'side view'], ['iso', 'isometric view'], ['zoom in', 'zoom in'], ['zoom out', 'zoom out'], ['look at last', 'look at the last object']]],
   ['Archive', 'red', [['hello world', 'load hello'], ['fog', 'load fog'], ['text', 'load text']]],
-  ['Scene', '', [['starter scene', 'starter scene'], ['inspect', 'what is in the scene'], ['undo', 'undo'], ['redo', 'redo'], ['help', 'help'], ['clear', 'clear']]],
+  ['Scene', '', [['starter scene', 'starter scene'], ['inspect', 'what is in the scene'], ['undo', 'undo'], ['redo', 'redo'], ['help', 'help'], ['self-test', 'selftest'], ['vocabulary', 'vocab'], ['missed phrases', 'misses'], ['version', 'version'], ['clear', 'clear']]],
 ];
 CHIPS.forEach(([title, tone, items]) => {
   const g = document.createElement('div');
