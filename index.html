@@ -215,7 +215,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-25a)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-28a · NL++)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -595,14 +595,17 @@ function parseRotation(t) {
   return null;
 }
 
-const NUM_WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, dozen: 12, fifteen: 15, twenty: 20, thirty: 30, fifty: 50, couple: 2, few: 3, several: 5 };
+const NUM_WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, dozen: 12, fifteen: 15, twenty: 20, thirty: 30, fifty: 50, couple: 2, pair: 2, duo: 2, trio: 3, few: 3, several: 5, handful: 5 };
 const MAX_COUNT = 60;
 
 function parseCount(t) {
   const s = t
+    .replace(/\bx?3\s?d\b/g, ' ')
     .replace(COORD_RE, ' ')
     .replace(/(?:size|radius|scale|width|height|length|rotate|rotating|by|move|shift|object|number|#)\s*[-\d.]+/g, ' ')
     .replace(/[-\d.]+\s*(?:degrees?|deg|units?|times|seconds?|x\b|%|st\b|nd\b|rd\b|th\b)/g, ' ');
+  const nx = t.replace(COORD_RE, ' ').match(/(?:^|\s)(\d+)\s*x\s+(?!(?:bigger|larger|smaller|taller|wider|longer|faster|slower|as|the|size)\b)(?=[a-z])/);
+  if (nx && +nx[1] >= 2) return Math.min(+nx[1], MAX_COUNT);
   const m = s.match(/(?:^|[^\d.])(\d+)(?![\d.])/);
   if (m) { const n = parseInt(m[1], 10); if (n >= 2 && n <= MAX_COUNT) return n; if (n > MAX_COUNT) return MAX_COUNT; }
   for (const [w, n] of Object.entries(NUM_WORDS)) if (wordRe(w).test(s)) return n;
@@ -612,10 +615,10 @@ function parseCount(t) {
 /* ── Materials, textures, styles ───────────────────────────────────────────── */
 
 const FINISH_WORDS = [
-  ['metal', /\b(metal|metallic|chrome|brushed|steely|mirror|mirrored|mirror-like)\b/],
-  ['gloss', /\b(shiny|glossy|polished|lacquered|lustrous|wet|gleaming)\b/],
+  ['metal', /\b(metal|metallic|chrome|brushed|steely|mirror|mirrored|mirror-like|reflective|reflecting)\b/],
+  ['gloss', /\b(shiny|glossy|polished|lacquered|lustrous|wet|gleaming|smooth(?!\s+colou?r)|slick)\b/],
   ['matte', /\b(matte|matt|dull|rough|chalky|unpolished|clay|satin)\b/],
-  ['glow', /\b(glow|glows|glowing|luminous|emissive|radiant|illuminated|lit up|self-lit|fluorescent)\b/],
+  ['glow', /\b(glow|glows|glowing|luminous|emissive|radiant|illuminated|lit up|self-lit|fluorescent|neon|neon-lit|electric)\b/],
 ];
 const TEXTURE_WORDS = [
   ['checker', /\b(checker|checkered|chequered|checkerboard|chessboard|chess)\b/],
@@ -1805,7 +1808,8 @@ function relSize(t, scene) {
   if (!m || !scene.objects.length) return null;
   const tail = m[m.length - 1], tg = resolveTargets(tail, scene);
   if (!tg.idx.length) return null;
-  const w = m[1], f = m[2] ? num(m[2]) : { twice: 2, double: 2, triple: 3, half: 0.5, 'bigger than': 1.3, 'larger than': 1.3, 'smaller than': 0.7 }[w] || 1;
+  const w = m[1], f = (m.length > 3 && m[2]) ? num(m[2]) : { twice: 2, double: 2, triple: 3, half: 0.5, 'bigger than': 1.3, 'larger than': 1.3, 'smaller than': 0.7 }[w] || 1;
+  if (!Number.isFinite(f)) return null;
   const ref = scene.objects[tg.idx[tg.idx.length - 1]];
   return clamp(ref.size * f, 0.05, 8);
 }
@@ -1851,21 +1855,22 @@ const TEMPLATES = {
 };
 const TPL_ALIAS = { 'solar system': ['solar system', 'planets'], forest: ['forest', 'woods', 'woodland'], village: ['village', 'town', 'hamlet'], city: ['city', 'skyline', 'downtown'], campfire: ['campfire', 'camp fire', 'bonfire'] };
 
+let MOOD_DEPTH = 0, EXEC_DEPTH = 0;
 function runScenery(scene, t) {
   const hasShape = findShapes(t).some((s) => s.shape !== 'star');
   const build = /\b(build|create|make|generate|set up|setup|give me|show me|add|draw)\b/.test(t);
-  if (build) for (const [name, words] of Object.entries(TPL_ALIAS)) {
-    if (words.some((w) => wordRe(w).test(t)) && !(hasShape && !/\b(of|with)\b/.test(t) && name !== 'forest')) {
+  if (build && MOOD_DEPTH === 0) for (const [name, words] of Object.entries(TPL_ALIAS)) {
+    if (words.some((w) => wordRe(w).test(t)) && !(name === 'forest' && /\bforest green\b/.test(t)) && !(hasShape && !/\b(of|with)\b/.test(t) && name !== 'forest')) {
       if (/\b(new|fresh|scratch|clean)\b/.test(t) || !scene.objects.length) scene.reset();
       const r = mulberry32(7 + scene.objects.length), ex = (c) => execute(scene, c);
-      TEMPLATES[name](ex, r, scene);
+      MOOD_DEPTH++; try { TEMPLATES[name](ex, r, scene); } finally { MOOD_DEPTH--; }
       return { status: 'success', message: `Built a ${name} scene (${scene.objects.length} objects). Try: make the biggest one gold · add fog · zoom out` };
     }
   }
-  const mm = t.match(MOOD_RE);
+  const mm = MOOD_DEPTH === 0 ? t.match(MOOD_RE) : null;
   if (mm && !hasShape && (/\b(scene|world|atmosphere|mood|vibe|feel|place|everything|environment|setting|it|look|theme)\b/.test(t) || /^\s*\w+\s*(scene|world|vibe)?\s*$/.test(t))) {
     const key = MOODS[mm[1]] ? mm[1] : MOOD_ALIAS[mm[1]];
-    MOODS[key].forEach((c) => execute(scene, c));
+    MOOD_DEPTH++; try { MOODS[key].forEach((c) => execute(scene, c)); } finally { MOOD_DEPTH--; }
     return { status: 'success', message: `Set a ${key} atmosphere (sky, fog, ground and lighting).` };
   }
   return null;
@@ -1969,7 +1974,271 @@ function runSpecial(scene, t) {
 }
 
 /** One clause: names, "another one", typo recovery, then the normal engine. */
+/* ═══ NL++ — canonicalizer, typo repair and clause coordination ═══════════════════════════════════
+ * Added after monkey-testing the parser (see monkeys.js). Everything here only REWRITES the user's
+ * sentence into a phrasing the engine below already understands, so the old behaviour is untouched
+ * whenever no rule fires. Every stage is wrapped in try/catch by the caller: if anything in here
+ * throws, the original text is used unchanged. */
+
+const NLP_LABEL_RE = /\b(?:saying|says|reading|reads|titled|spelling|that says|that reads|with the words?)\b/;
+const NLP_DIRW = Object.keys(DIRS).sort((a, b) => b.length - a.length).join('|');
+const NLP_SHPW = SHAPE_KEYS.map(esc).join('|');
+const NLP_COLW = COLOR_NAMES.map(esc).join('|');
+const NLP_INDEF = '(?:a|an|some|one|another|\\d+|two|three|four|five|six|seven|eight|nine|ten|twelve|dozen|couple of|few|several|pair of|trio of)';
+const NLP_NP = `(?:(?:the|my|that|this|those|these|all|every|each)\\s+)?(?:[a-z-]+\\s+){0,2}?(?:${NLP_SHPW})(?:s|es)?`;
+const NLP_NPL = `(?:it|them|everything|all of them|${NLP_NP})`;
+const NLP_ORD = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
+const NLP_GERUND = {};   // "spinning" -> "spin"
+for (const a of Object.values(ANIMS)) for (const w of a.w) if (/^[a-z]+ing$/.test(w)) { const st = w.slice(0, -3); for (const c of [st, st + 'e', st.slice(0, -1)]) if (a.w.includes(c)) { NLP_GERUND[w] = c; break; } }
+const NLP_ANIMW = [...new Set([...Object.keys(NLP_GERUND), ...Object.values(NLP_GERUND)])].sort((a, b) => b.length - a.length).join('|');
+
+/** Camera / viewpoint phrasing → one of the camera phrases the engine already knows. */
+function nlpCamera(t) {
+  if (findShapes(t).length) return null;
+  if (/\b(?:look at|focus|zoom (?:to|on|into)|center on|centre on|fly to|frame the|take me to)\b/.test(t)) return null;
+  const cam = /\b(?:camera|cam|view|viewport|viewpoint)\b/.test(t), re = (s) => new RegExp(s).test(t);
+  if (cam && re('\\b(?:reset|restore|default|home|original|initial|re-?cent(?:er|re))\\b')) return 'reset camera';
+  if (re('\\b(?:fit (?:it |everything |all )?(?:to |in |into )?(?:the )?(?:view|screen|window|frame)|show (?:me )?(?:all|everything)|view (?:all|everything)|see (?:all|everything)|zoom (?:to )?(?:fit|extents|all)|frame (?:all|everything|the scene)|(?:re-?)?cent(?:er|re) (?:the )?(?:view|camera|scene))\\b')) return 'reset camera';
+  const viewy = cam || re('^(?:view|look|see|show|go|switch|change|take|get|give)\\b');
+  if (viewy && re("\\b(?:from|to|at) (?:the )?(?:top|above)\\b|\\btop[- ]?down\\b|\\bbird'?s?[- ]?eye\\b|\\boverhead\\b|\\btop (?:view|camera|angle)\\b")) return 'top view';
+  if (viewy && re('\\bfront (?:view|camera|angle)\\b|\\b(?:from|to|at) (?:the )?front\\b|\\bhead[- ]on\\b|\\bface[- ]on\\b')) return 'front view';
+  if (viewy && re('\\bside (?:view|camera|angle)\\b|\\b(?:from|to|at) (?:the )?(?:side|left|right)\\b|\\bprofile\\b')) return 'side view';
+  if (cam && re('\\b(?:rotate|orbit|spin|turn|swing|pan|tilt|circle|revolve)\\b')) return 'isometric view';
+  if (re('\\bzoom (?:way |far |much |a lot |all the way )?out\\b') || ((cam || re('^(?:get|pull|move|back|stand|walk|drift)\\b')) && re('\\b(?:back|away|farther|further|out|wider)\\b'))) return 'zoom out';
+  if (re('\\bzoom (?:way |far |much |a lot |all the way )?in\\b') || ((cam || re('^(?:get|pull|move|come|push|walk|bring|zoom)\\b')) && re('\\b(?:closer|nearer|in|forward|tighter)\\b'))) return 'zoom in';
+  return null;
+}
+
+/** Does the whole tail of a phrase consist of a colour (and filler)? */
+function nlpOnlyColor(c) {
+  const sp = findColors(c);
+  if (!sp.length) return false;
+  let rest = c, k = sp.length;
+  while (k--) rest = rest.slice(0, sp[k].i) + ' ' + rest.slice(sp[k].j);
+  return rest.replace(/\b(?:a|an|the|now|more|very|really|so|bit|little|kind of|kinda|colou?r|colou?red|instead|again|too|just|quite|totally|completely)\b/g, ' ').trim() === '';
+}
+
+/** One sentence in → one (usually the same) sentence out. Lower-cases only when it actually rewrites. */
+function nlpCanon(text, scene) {
+  const orig = text.trim();
+  if (NLP_LABEL_RE.test(orig.toLowerCase())) return orig;
+  let tl = orig.toLowerCase();
+  const has1 = (s) => findShapes(s).length > 0;
+  const sceneHas = (s) => { const fs = findShapes(s); return (scene.objects || []).some((o) => fs.some((sh) => sh.shape === o.shape)); };
+  const R = (re, rep) => { tl = tl.replace(re, rep); };
+
+  // 0 ─ forms of address, politeness
+  R(/^(?:(?:hey|hi|hello|ok|okay|yo|so)[, ]+)?(?:claude|x3d(?: studio)?|studio|computer|assistant|bot)\s*[,:!–-]\s*/, '');
+  R(/^(?:please|pls|plz|kindly)[, ]+/, '');
+
+  // 1 ─ camera and lights (whole sentence)
+  const cam = nlpCamera(tl); if (cam) return cam;
+  if (/^(?:please )?(?:turn|switch|flip|put|power)\s+(?:on|up)\s+(?:the |all |some )?(?:lights?|lamps?)$|^(?:turn|switch|flip|put)\s+(?:the |all )?(?:lights?|lamps?)\s+on$|^lights?\s+on$|^let there be light$/.test(tl)) return 'daylight';
+  if (/^(?:please )?(?:turn|switch|flip|put|power|shut)\s+(?:off|down)\s+(?:the |all |some )?(?:lights?|lamps?)$|^(?:turn|switch|flip|put|shut)\s+(?:the |all )?(?:lights?|lamps?)\s+off$|^lights?\s+(?:off|out)$|^kill the lights?$/.test(tl)) return 'night';
+
+  // 2 ─ "more of those"
+  R(/^(?:please )?(?:make |add |give me |get me )?(?:some |a lot )?more (?:of )?(?:those|these|that|them|it|the same)$/, 'one more');
+
+  // 3 ─ asking for something to be added, indirectly
+  tl = tl.replace(/^(?:i want|i'd like|i would like|i need|give me|get me|make me|let me have|can i have|could i have)\s+an?\s+(bigger|larger|smaller|taller|shorter|wider|thinner)\s+(.+)$/, (m, comp, rest) => (has1(rest) ? (sceneHas(rest) ? `make the ${rest} ${comp}` : `add a ${/^(?:bigger|larger|taller|wider)$/.test(comp) ? 'large' : 'small'} ${rest}`) : m));
+  R(new RegExp('^(?:how|what) about (?:we (?:add|get|have|do) |adding |getting |having )?(?=' + NLP_INDEF + '\\b)'), 'add ');
+  R(new RegExp('^(?:can|could|may|might|shall) (?:we|i) (?:please |just )?(?:get|have|add|see|try|make|build|create|put in|throw in)\\s+(?=' + NLP_INDEF + '\\b)'), 'add ');
+  R(new RegExp('^(?:can|could|would|will) you (?:please |just )?(?:get|give|fetch|bring|hand) (?:me |us )(?=' + NLP_INDEF + '\\b)'), 'add ');
+  R(new RegExp("^(?:i|we)(?:'d| would| really| just| might| do)* (?:love|like|want|need|desire|crave|fancy|prefer|wish for)(?: to (?:have|see|get))?\\s+(?=" + NLP_INDEF + '\\b)'), 'add ');
+  R(new RegExp('\\b(?:pop|chuck|stick|slip|slot|plonk|plop|bring|drop|bung|slap|toss|throw|fling|lob|whip|rustle|conjure|summon|materiali[sz]e|manifest)\\s+(?:in|up|out)\\s+(?=' + NLP_INDEF + '\\b)', 'g'), 'add ');
+  R(new RegExp('\\b(?:conjure|summon|materiali[sz]e|manifest|fetch)\\s+(?=' + NLP_INDEF + '\\b)', 'g'), 'add ');
+  R(new RegExp('^(?:stick|slap|plonk|plop|bung|chuck|drop|slip)\\s+(?=' + NLP_INDEF + '\\b)'), 'add ');
+  R(/\s+(?:in|into|over|on) (?:there|here)\b/, '');
+  if (/^add\b/.test(tl)) R(/\s+(?:in|out)$/, '');
+
+  // 4 ─ deleting
+  const DEL = 'bin|zap|banish|nix|axe|scrap|cull|scrub|obliterate|annihilate|vaporize|vaporise|dump|junk|expunge|exterminate|abolish|boot|cut|shoo';
+  tl = tl.replace(new RegExp('\\b(?:' + DEL + ')\\b\\s+(?:out\\s+|off\\s+|away\\s+)?(.+)$'), (m, rest) => ((has1(rest) || /^(?:it|them|that|this|everything|all)\b/.test(rest)) && !/^(?:in|into|to|off|up|down)\b/.test(rest) ? 'delete ' + rest : m));
+  R(/\b(?:throw|chuck|toss|kick|cast|sweep|shoo|send|tear|rip|knock|take|pull)\s+(?:away|out|down|aside)\s+(?=(?:the|my|that|this|those|these|all|every|each|it|them|everything)\b)/, 'delete ');
+  tl = tl.replace(/\b(?:take|pull|kick|throw|toss|chuck|sweep|shoo|wipe|clear|rub|cross|strike)\s+(.+?)\s+(?:out|away|off)(?:\s+of\s+(?:here|there|the scene|the picture|the world|view|my sight))?$/, (m, np) => (has1(np) || /^(?:it|them|that|this)$/.test(np) ? 'delete ' + np : m));
+  R(/\bget\s+(.+?)\s+(?:out of (?:here|there|the scene|the picture|my sight|the way|view)|away(?: from here)?|gone)\b/, 'delete $1');
+  tl = tl.replace(/^(?:the |my |that |this )?(.+?)\s+(?:has to|have to|must|needs? to|should|can|could|gotta|has got to|will have to|ought to)\s+(?:go|leave|be gone|disappear|vanish|be removed|be deleted|be erased|be destroyed|be thrown out)$/, (m, np) => (has1(np) ? 'delete the ' + np : m));
+  tl = tl.replace(/\bmake\s+(.+?)\s+(?:disappear|vanish|go away|be gone|evaporate|fade away|dissolve)\b/, (m, np) => (has1(np) || /^(?:it|them)$/.test(np) ? 'delete ' + np : m));
+  R(/^(?:i|we)\s+(?:don't|do not|dont|no longer|won't|will not)\s+(?:want|need|like|require)\s+(?:the |that |this |those |these |my )?(.+?)(?:\s+any ?more|\s+now)?$/, (m, np) => (has1(np) ? 'delete the ' + np : m));
+
+  // 5 ─ sizes
+  R(/\b(?:upsize|supersize|super-size|amplify|augment|fatten|swell|puff up|bulk up|beef up|pump up|bump up|build up|plump up|fluff up)\b/g, 'enlarge');
+  R(/\b(?:downsize|lessen|condense|compress|miniaturi[sz]e)\b/g, 'shrink');
+  tl = tl.replace(new RegExp('\\b(?:scale|size|blow|pump|puff|beef|crank)\\s+(' + NLP_NPL + ')\\s+up\\b'), 'enlarge $1');
+  tl = tl.replace(new RegExp('\\b(?:scale|size|tone|dial|cut|whittle|pare)\\s+(' + NLP_NPL + ')\\s+down\\b'), 'shrink $1');
+  tl = tl.replace(/\b(gigantic|colossal|enormous|mammoth|humongous|monstrous|titanic|immense|gargantuan|massive|monumental|astronomical)\b/g, (m) => (DATA.SIZES[m] ? m : 'huge'));
+  tl = tl.replace(/\b(minuscule|teeny|teensy|puny|itty-bitty|itsy-bitsy|diminutive|wee|teeny-tiny|pint-sized)\b/g, (m) => (DATA.SIZES[m] ? m : 'tiny'));
+  R(/\b((?:a (?:bit|little|tad) |slightly |way |much |a lot )?)(?:less|not so|not that|not as|not too|not quite so|not nearly as)\s+(?:big|large|huge|tall|giant|enormous|wide|long)\b/g, '$1smaller');
+  R(/\b((?:a (?:bit|little|tad) |slightly |way |much |a lot )?)(?:less|not so|not that|not as|not too|not quite so|not nearly as)\s+(?:small|little|tiny|short|narrow|puny)\b/g, '$1bigger');
+  const ADV = '(?:a bit |a little |kind of |kinda |rather |pretty |really |very |so |way |just )?';
+  tl = tl.replace(/^(?:the |my )?(.+?)\s+(?:could|would|can|might|should|ought to|needs? to|has to)\s+(?:be |look |do with |use )?(?:a bit |a little |slightly |much |way |some |a lot |a good deal )?(?:more |even )?(bigger|larger)$/, (m, np) => (has1(np) ? `make the ${np} bigger` : m));
+  tl = tl.replace(/^(?:the |my )?(.+?)\s+(?:could|would|can|might|should|ought to|needs? to|has to)\s+(?:be |look |do with |use )?(?:a bit |a little |slightly |much |way |some |a lot |a good deal )?(?:more |even )?(smaller|tinier)$/, (m, np) => (has1(np) ? `make the ${np} smaller` : m));
+  tl = tl.replace(/^(?:give|get|lend|grant)\s+(?:the |my )?(.+?)\s+(?:some |a lot of |a bit of |a little |much )?more\s+(?:size|volume|scale|girth|mass|heft|bulk|presence|room)$/, (m, np) => (has1(np) ? `make the ${np} bigger` : m));
+  tl = tl.replace(/^(?:the |my )?(.+?)\s+(?:needs?|requires?|wants?)\s+(?:some |a lot of |a bit of |a little )?more\s+(?:size|volume|scale|girth|mass|heft|bulk|presence)$/, (m, np) => (has1(np) ? `make the ${np} bigger` : m));
+  tl = tl.replace(/^(?:take|bring|knock|turn|dial)\s+(?:the |my )?(.+?)\s+down\s+(?:a |one )?(?:size|notch|peg|step|level)$/, (m, np) => (has1(np) ? `make the ${np} smaller` : m));
+  tl = tl.replace(/^(?:take|bring|turn|dial|bump)\s+(?:the |my )?(.+?)\s+up\s+(?:a |one )?(?:size|notch|peg|step|level)$/, (m, np) => (has1(np) ? `make the ${np} bigger` : m));
+  tl = tl.replace(new RegExp('^(?:the |my )?(.+?) (?:is|are|looks?|seems?|feels?) ' + ADV + '(?:tiny|puny|microscopic|miniature|itsy|minuscule|teeny|wee)$'), (m, np) => (has1(np) ? `make the ${np} bigger` : m));
+  tl = tl.replace(new RegExp('^(?:the |my )?(.+?) (?:is|are|looks?|seems?|feels?) ' + ADV + '(?:huge|oversized|enormous|gigantic|massive|giant|colossal|humongous|gargantuan)$'), (m, np) => (has1(np) ? `make the ${np} smaller` : m));
+  tl = tl.replace(/\b(resize|scale|size)\s+(.+?)\s+to\s+(\d+(?:\.\d+)?)\s*$/, (m, v, np, n) => (has1(np) || /\b(?:it|them|everything)\b/.test(np) ? `resize ${np} to size ${n}` : m));
+
+  // 6 ─ moving
+  const NPM = '(?:the |my |that |this )?((?:[a-z-]+ ){0,2}?(?:' + NLP_SHPW + ')(?:s|es)?|it|them)';
+  const MOD = '(?:a bit |a little |slightly |much |way |even |a lot )?';
+  tl = tl.replace(new RegExp('^' + NPM + ' (?:should|must|needs? to|has to|ought to|can|could|gotta|will|shall|may) (?:go|move|be moved|be put|slide|shift|travel|drift|float|fly|be(?= (?:further|farther|more|a bit|a little)\\b)) ' + MOD + '(?:further |farther |more )?(?:over |on )?(?:to the |toward the |towards the |to )?(' + NLP_DIRW + ')\\b(.*)$'), 'move the $1 $2$3');
+  tl = tl.replace(new RegExp('^(?:take|haul|hoist|heave|drag|bump|carry|elevate|hike|boost|fling|lug|tug|yank|shunt|steer|guide|usher) ' + NPM + ' ' + MOD + '(?:further |farther )?(?:over |on )?(?:to the |toward the |towards the )?(' + NLP_DIRW + ')\\b(.*)$'), 'move the $1 $2$3');
+  tl = tl.replace(new RegExp('^(?:the |my )?(' + NLP_NP.replace(/^\(\?:\(\?:the\|my\|that\|this\|those\|these\|all\|every\|each\)\\s\+\)\?/, '') + ')[, ]+(?:go|move|slide|shift|head|travel) (?:to the |toward the )?(' + NLP_DIRW + ')$'), 'move the $1 $2');
+  tl = tl.replace(new RegExp('^go (' + NLP_DIRW + ') ' + MOD + 'with ' + NPM + '$'), 'move the $2 $1');
+  tl = tl.replace(new RegExp("^(?:i want|i'd like|i would like|i need|i prefer) " + NPM + ' (?:to be |to go |to move |to sit |to stay )?' + MOD + '(?:further |farther |more |over )?(?:to the |toward the )?(' + NLP_DIRW + ')$'), 'move the $1 $2');
+  tl = tl.replace(new RegExp('^(?:put|place|set|keep|have) ' + NPM + ' ' + MOD + '(?:more |further |farther )(?:to the |toward the )?(' + NLP_DIRW + ')$'), 'move the $1 $2');
+
+  tl = tl.replace(new RegExp('^(?:turn|spin|flip|rotate) (' + NLP_NPL + ') (?:around|round|over|about)$'), 'rotate $1 180 degrees');
+  R(new RegExp('^stack (?=' + NLP_INDEF + '\\b)'), 'add ');
+
+  if (/^add\b/.test(tl) && !/\bon top of\b/.test(tl)) tl = tl.replace(new RegExp('\\b(?:on|onto|upon)\\s+(?=(?:the|that|this|my)\\s+(?:[a-z-]+\\s+){0,2}?(?:' + NLP_SHPW + '))'), 'on top of ');
+
+  // 7 ─ colours
+  R(/\b(?:shade|coat|stain|glaze|dip|colori[sz]e|wash|enamel|lacquer|spray)\b(?=\s+(?:the |my |that |this |it |them |all |every |each |everything))/g, 'paint');
+  tl = tl.replace(/^(?:i'd like|i would like|i want|i need|i prefer|let's have|let us have|we need|we want)\s+(?:the |my )(.+?)\s+to be\s+(.+)$/, (m, np, c) => (has1(np) && nlpOnlyColor(c) ? `make the ${np} ${c}` : m));
+  tl = tl.replace(/^(?:could|can|would|will|shall)\s+(?:you |we |i )?(?:please )?(?:the |my )(.+?)\s+be\s+(.+)$/, (m, np, c) => (has1(np) && nlpOnlyColor(c) ? `make the ${np} ${c}` : m));
+  tl = tl.replace(/^(?:the |my )(.+?)\s+(?:would|will|might|could)\s+(?:look|be|seem)\s+(?:so |much |way |a lot |even |just )?(?:better|nicer|best|great|cooler|prettier|good)\s+(?:in |as |if it were |if it was |if it were made )?(.+)$/, (m, np, c) => (has1(np) && nlpOnlyColor(c) ? `make the ${np} ${c}` : m));
+  tl = tl.replace(/^(?:the |my )(.+?)\s+(?:is|looks?|seems?|appears?|has become|became|turned|turns)\s+(?:now |currently |actually |really |already )*(.+)$/, (m, np, c) => (has1(np) && nlpOnlyColor(c) ? `make the ${np} ${c}` : m));
+  tl = tl.replace(/^(?:the |my )?(.+?)\s*(?:->|→|=>|>>|=|:)\s*(.+)$/, (m, np, c) => (has1(np) && nlpOnlyColor(c) ? `make the ${np} ${c}` : m));
+
+  // 8 ─ animation
+  tl = tl.replace(new RegExp('\\b(?:start|begin|commence|resume|keep|continue)\\s+(' + NLP_ANIMW + ')\\s+(?:the |my |that |this |those |these )?(.+)$'), (m, g, np) => (has1(np) || /^(?:it|them|everything)$/.test(np) ? `make the ${np} ${NLP_GERUND[g] || g}` : m));
+  tl = tl.replace(new RegExp('\\bturn on (?:the )?(' + NLP_ANIMW + ')(?: effect| animation)? (?:for|on|to|of) (?:the |my |that |this )?(.+)$'), (m, g, np) => `make the ${np} ${NLP_GERUND[g] || g}`);
+  tl = tl.replace(new RegExp('\\b(?:set|get|put|start) (?:the |my )?(' + NLP_NP.replace(/^\(\?:\(\?:the\|my\|that\|this\|those\|these\|all\|every\|each\)\\s\+\)\?/, '') + '|it|them) (' + NLP_ANIMW + ')$'), (m, np, g) => `make the ${np} ${NLP_GERUND[g] || g}`);
+  tl = tl.replace(new RegExp('\\bgive (?:the |my )?(' + NLP_NPL + ') (?:some |a bit of |a little )?(' + NLP_ANIMW + ')$'), (m, np, g) => `make the ${np} ${NLP_GERUND[g] || g}`);
+
+  // 9 ─ which object?
+  R(/\b(?:the )?(?:new|newest|latest|freshest|most recent) (?:one|shape|object|thing|addition)\b|\bthe one i (?:just )?(?:added|made|created|put|placed|built|drew|spawned)(?: (?:just )?now| (?:a (?:moment|second|sec) ago|earlier))?\b|\bwhat i just (?:added|made|created)\b/g, 'the last one');
+  R(new RegExp('\\b(?:every|each)\\s+((?:[a-z-]+\\s+)?)(' + NLP_SHPW + ')\\b', 'g'), (m, adj, sh) => `all the ${adj}${sh}${/(?:s|x|z|ch|sh)$/.test(sh) ? 'es' : 's'}`);
+  R(/\b(?:the )?(?:whole|entire) (?:scene|world|thing|place|lot)\b|\ball of (?:it|that|this)\b|\bthe lot\b|\beverything in (?:the )?(?:scene|world)\b/g, 'everything');
+  R(new RegExp('\\ball(?=\\s+(?:' + NLP_COLW + '|bigger|smaller|larger|huge|tiny|spin|rotate|bounce|pulse|glow|shiny|metallic|transparent)\\s*$)'), 'everything');
+  if (!/^(?:add|create|build|spawn|put|place|insert|draw|generate)\b/.test(tl)) {
+    tl = tl.replace(new RegExp('\\b(' + NLP_SHPW + ')\\s+(?:number\\s+|no\\.?\\s*|#)?(\\d+)\\b(?!\\s*(?:[,.]\\s*)?\\d)(?!\\s*(?:units?|times|x\\b|degrees?|deg|%|percent|meters?|m\\b|cm|px))'), (m, sh, n) => (+n >= 1 && +n <= 10 ? `${NLP_ORD[+n - 1]} ${sh}` : m));
+  }
+
+  // 10 ─ numbers and positions
+  R(/(^|\s)(\d+)\s*x\s+(?!(?:bigger|larger|smaller|taller|wider|longer|faster|slower|as|the|size)\b)(?=[a-z])/g, '$1$2 ');
+  R(/\(?\bx\s*[=:]\s*(-?[\d.]+)[,\s;]+y\s*[=:]\s*(-?[\d.]+)[,\s;]+z\s*[=:]\s*(-?[\d.]+)\)?/g, '$1 $2 $3');
+  tl = tl.replace(/^(?:please )?(?:center|centre)\s+(.+)$/, (m, np) => (/\b(?:view|camera|scene|screen|everything|text)\b/.test(np) ? m : `move ${np} to the center`));
+
+  // 11 ─ lists of things to add
+  R(/\s*&\s*/g, ' and ');
+  R(/\s+(?:along with|as well as|together with)\s+/g, ' and ');
+  if (/^(?:add|create|build|spawn|put|place|insert|draw|generate|give me|make me|i want|i'd like|i need)\b/.test(tl)) {
+    R(/\s+plus\s+(?=(?:a|an|another|\d+|one|two|three|some)\b)/g, ' and ');
+    R(/,\s*(?:and\s+)?(?:also\s+)?(?=(?:a|an|another|one|two|three|four|five|some|\d+\s+[a-z])\b)/g, ' and ');
+  }
+  R(/\band also\b/g, 'and');
+  return tl === orig.toLowerCase() ? orig : tl;
+}
+
+/** "make the sphere and the cube pink" → "make the sphere pink; make the cube pink" */
+function nlpDistribute(text) {
+  const tl = text.trim().toLowerCase();
+  const vm = /^((?:please |can you |could you |would you )?(?:make|paint|color|colour|turn|recolor|repaint|tint|dye|change|set|shrink|enlarge|spin|delete|remove|rotate|duplicate|clone|move))\s+(?:both\s+)?/.exec(tl);
+  if (!vm) return text;
+  const np = `(?:(?:the|my|that|this)\\s+)?(?:[a-z-]+\\s+)?(?:${NLP_SHPW})(?:s|es)?`;
+  const m = new RegExp(`^(${np}(?:\\s*(?:,\\s*and|,|and|&)\\s*${np})+)\\s+(.+)$`).exec(tl.slice(vm[0].length));
+  if (!m) return text;
+  const items = m[1].split(/\s*(?:,\s*and\s+|,\s*|\s+and\s+|\s*&\s*)/).filter(Boolean);
+  if (items.length < 2 || items.some((it) => !findShapes(it).length)) return text;
+  if (findShapes(m[2]).length && !/^(?:to|into)\b/.test(m[2])) return text;
+  return items.map((it) => `${vm[1]} ${/^(?:the|my|that|this)\b/.test(it) ? '' : 'the '}${it} ${m[2]}`).join('; ');
+}
+
+/** "make the sphere red" + "the cube green"  →  the second clause inherits "make". */
+function nlpInherit(parts) {
+  let verb = null;
+  return parts.map((p) => {
+    const pl = p.trim().toLowerCase(), vm = /^(?:then\s+|also\s+)?(make|paint|color|colour|turn|recolor|repaint|tint|dye|change|set|shrink|enlarge|spin|rotate|delete|remove)\b/.exec(pl);
+    if (vm) { verb = vm[1]; return p; }
+    if (verb && /^(?:the|my|that|this)\s+/.test(pl) && !EDIT_RE.test(pl) && findShapes(pl).length) return verb + ' ' + p.trim();
+    return p;
+  });
+}
+
+/* ── Typo repair that cannot turn real words into commands ── */
+const NLP_COLLIDE = new Set('aback able aches across addle afire age aide ale alight alive all alone alum amp and annuls apricots aquamarines aquas arc arched archer archers archest archways arcs aright ark arose averaged averages awry azures babble babe babel backs backyard backyards bad bade bail bails bake bald balds bale bales ballsy balm balms ban bands bandy bane bang bani bank banker banned banners bans banter bard barge bark barred barrels barren barrow barrows base bases basic basil basing basins basis bask batter battle baud bawl bawls bay beach beads beady beak beam bean bear beard bearer bears beat beau beck bed beep bell bellow bells bend better bettering bide bight bile bill bills bind bitter blab blacks bland blank blight blip blobs bloc blocs blog blond bloods bloody bloom blot blow blower blown blued bluer blues bluish blur bob bobble bodes bogs boil boils bold bole boles boll bolls bond bone bones boob boom boon bores born boss bottled bottles bounced bouncer bounces bouncy bow bowel bowels bower bowers bows boxed boxer boxers bracelets brad brand brass brawn bray bread breath brilliants bring brings brink brinks brisk brisks bronzed bronzes brood brow browns brows brush bubbled bubbles bubbly buck budge bugger bugled bugler bugles builds built bulge bull bulls bumble bumpkin bungle burble burgle burnt burs bursts bush bust buster butler butte butted butters buttery buttes cabins cable cables cage cake call caller calls camber camp can canard cane canes capsuled captions carrel case cases caste castled castles cater cation cattle caution cave chain chains chance changed changes char charcoals charge chars cheat cheery chess chestnuts chests chevrons chick chills chin chins chocolates choir choirs chopper choral chromed chromes cinch clack clan clean clears cleat cleft clime clip clock clocks clogs cloned clones close closed closes closet clove clover clue coach coal coals cobble cobs code codes cods cog cogwheels coif coifs coke cokes cold colon cols columns come comes compacts con conchs confer conifers conk conks cons cool cools coon coons coop cooper coos cope copes copier copped coppers coppery cops copter corals cords core cores corn corns corral cote cotes cots cottages couch cove coves cower cowering cowers cowl cowls cows cram cramp crane crape crass crated crater crates crave craze creak creams creamy crease created creates credo cremate cress crest crew crick cricks crimsons cripple cripples crone crones cropper crops crossed crosser crossest crown crows crumpet crust cub cubed cubs cue cues curate cure cures custard cute cutter dale dame dames damp dank dare darn dart dawn dead deal dear dearer dears deck deed deem deeps deer deft deleted deletes demon denims deplete desks destroys dick dicks digger dill dills dime dimes dine dines ding dings dint dire dirk dirks dis disco discos discus dish doable docket dockets doe does dogs dole doles domed don done doom doorstep doorways dope dopes dork dose doses dote dotes doubled doubles doublet doubly doughnuts douse douses dove doves downs downy doze dozes dray dream dross drown duck dudes dues dukes dumber dunces dune dungs dunks duns dupes duplicated duplicates dusk dust each ear earl ears ease eases eat eater eave edge egg egos eight elate elates elide elope ember emeralds ems enlarged enlarger enlarges eras erased eraser erases ergs espressos evergreens expands expend fable fables fade faint fake fall falls fare farrow farrows fat fear fears feat fellow fennel fettering fiat fie fife fight file fill fills films filmy fine fink fir fired fires firm firs five flab flack flag flak flaming flamingos flamings flan flap flats flaw flax flay flight flips flit float flock flocks flood flop flower flue flush fogs foil foils fold follow fords fore fores forests formal fountain fowl fowls foxes frat fray free frees fright frown fuchsias fuck fudge funnels funner gable gables gale gall galls garble gases gateways gave gay gees geld gels gem generated generates geodesics germs gets ghostwrite giants gild gill gills gilt gland glass glide glob globes globs glove glower glue glum goad gobble god golds golf gone good goon goop gown grab grabs grad grads gram grams grands grange grant grasp grasps grassy grate gravy greed greens greet grew grind gross grosses grown guild gums gust gutter gyms hack hair hairs hake hale hall hallow halls hand hark harrow harrows hart harts hater have head heal hear heard hearer hears hearth hearths hearty heat heats hedge heft hell hemispheres hems hick hide hill hilly hilt hilts hint hire hither hobble hoe hogs hold hole hollows homed homer homes homey hone hones honeydews hood hoof hook hoops hoot hop hope hopper horns horny horse horses hose hoses housed hove howl howls hue hug huger hugs hulls igloos ill ills immerse inert ink insect inserts inset invert invisibly irate ire jack jaded jades jape jeep jigger jilt jogs join joins jounce jowl jowls judge just kale keep khakis kill kills kilt king kings kink knit knits knob knobs know knows lab labels lace lack lade lager lagoons lake lame lamp land landscaped landscaper landscapes lane lanes lapel larch larches larder larges largo lark late later lavenders leach lead ledge lefts lefty lemons lemony lent lest let libel lice lie lief lien lifer lift lighthouses lights like liken lilacs lilt limb limed limes limn limo limp limy linden line lined linens liner lines link lint lip lire lite littering littler live liven lob lobe lock locket lockets locks loft logs loin loins lone loner look loom loon loops loopy loot lop lope lords lorn lose loser loss louse louses love lover lowed lowering lowers lozenges lube lubes luck lumber lush lust mace macroscopic made maker makes male mall malls mama mamma mane manner marbled marbles march marches mare mark maroons marrow marrows masher mashers mass mate maze mead meal meat mediums mellow mess might mike mile mill mills mime mind mine miniatures minim minima minis mink mints minty minx mire miss missiles missive mist mitt moan mobs moccasins mode mods mole mono moo mood moons moor moos moot mope mops moral more morn moron mossy most mote mottle mountains mouse mouses moved mover moves movie mower mowers mows muck muss must mutter nail nark narrow narrows nary nave nay near neared nears neat neater newel newels next nigger nigher night nine nipple nipples non none noon nose not now nude nudged nudges number oases obit oblongs oceans oil oils oink old olden olives one ones opal opine oral oranges orate orb orbits orchids orcs ores ounce oust ova ovals overage owl owls own pace pack paddle page pain pains painter painters paints pal palace palate palates paled paler pales pall palls palm pals pane panes pant parch parches pare park passive pate pates pave pawn peace peal pear pearls pearly pears peat peck peep peon perch periwinkles petites pick pie pies pike pikes pile piles pillars pin pined pines ping pings pinks pins pint pip piped piper pipers pips placed placer places plaice plaint plan planed planets plank planks plans plant plants plated platen platens platforms plight pluck plug plugs plumb plume plump plums plush poach pock pocket pockets point pointed pointier poke pol poled poles poll polls polo pols pone pones poop pope popes pore porn pose pottage pounce power powering powers poxes prate prates pray preach preen preserve preserved preservers preserves pretzels prey prick pricks prim print printer printers prose pucks pull pulls pulsed pulses pumpkins punk purism purpler purples purse pus putter qua quart quarto quarts rack racket rackets rage rake ram ramps rams rang range rap rasher rashers rasp rate rave ray reach read real ream rear rears rectangles red reds remote removed remover removes repaints replaced replaces reprint reside rest rick rickets ricks ride rife rig rights rigs rile rill rills rime rind rinds rink rinks ripe rippled rise risk risks robe robs rocked rocker rockers rode roe roes roil roils role romp room rope roses rosy rotated rotates rote rouse rouses rove rower rowers rub rubble rube rubes rubs rugby ruing rump runes rung rungs runnel runt ruse rush rusk rusts rusty rut ruts sable sables sack sad saddled saddles safe sag saga sager sages sago sags said sail saint sake sale salmons salon saloon salver same sands sandy sane sang sank sans sap sapphires sat sate sauce sauced saucers sauces saucier save scab scald scaled scales scalp scaly scar scare scars scat scone scones scope scow scream screws screwy scrip sea seal seam sear sears seas seashells seats sect sedge seep seeps sell send senna sent set shack shaft shale shall sheen sheep sheer sheets shelf shells sherry shifts shifty shill shills shim shin shirt shit shooter shorted shorten show showman showmen shrank shrew shriek shrift shrine shrinks shrunk side sift sigh sight signs sill sills silt silvers silvery sim sin sine sing sings sink sire siring sitar sitars skate skeet skim skin slabs slack slag slake slam slap slat slated slates slats slave slaw slay sleet sleeves slice slid slider slides slight slime slims slimy slip slit sliver slob sloe sloop slop sloped slopes slops slow slower slue slum slush smack smalls smell snack snails snap snarl snide snob snot snots snows snowy soak soaps soapy soar soars socket sockets soil soils sold sole solver some soon sop sorest sorter soup souse souses sow sower sowers sown spaceships spake span spar sparing sparkled sparkler sparkles spars spat spate spawns spell spice spiked spikes spiky spill spills spinal spinals spine spins spiny spire spit spite spoke spool sporing sprang sprig springs springy sprint sprockets sprung spun spying squared squarer squares squire stab stable stables stabs stacks stag stage stags stains stair staircases stairways stale stalk stall stand standards stank stare stares stark starlet start starts state stats stay stays steal steed steels steely steep steeps steer stems step stews stick stile stilt stir stirs stock stood stools stoop stops stow strap straws stray strep strew string stripe strips strop strumpet stuck suck surfaced surfaces swab swaddle swap swat sway sweat sweet swell swift swim swine swords tabled tablet tablets tack tail taint take talc tale tales talk talker tally tamp tangerines tanner tape tar tars tea teach teak teals team tear tears teas teat tedium tee tees tell teller tent terrains terrapin test tetrahedrons texts thee thees think thistles thorn three threes tick tide tidy tie tight tilde tiled tiles till tiller tills tilts time tin tine ting tings tinny tins tint tipple tipples tire tit tithe titled titles tittle toadstools togs toil toils told toll tome tomes tone toner tones tony tool torn tors torts toss tours towed towel towels town tramp tray treed trek treks tress triangles trick tricks tries trip true trues trumped trumpets trust tub tuba tubas tubed tuber tubers tubs tuck tune tunes tunnel turquoises turrets tuxes twee twine umbel unto usage utter vale valentines vales vamp vane vanes vape vapes vast vasts veal veep venerate vessels vile vine violent violets vise vises vole wack waddle wade wader wafer wage wager waiter waive wake wale wall walls wand wane wanner warble wards ware washed washes waster wasters waters watery waved waver waves wavy way weal wear wearer wears weave wedged wedges weep weft what wheal whet while whine whistle whit whiten whiter whites whits whoop widen wider wife wight wile will wills wilt win wince wind wined wines wing wings wink wino wins wipe wipes wire wise wisher wishers wive wobbled wobbles wobbly woods word wordy works worlds worms worn wove wrath wreathe wreaths wright wring wrings write year years yellows yowl yowls yuck zeal zing zings zone zones zoo zooms zoos'.split(' '));
+const NLP_SLANG = new Set('pls plz thx thnx ty tyvm lol lmao omg idk btw asap fyi imo hmm hmmm umm ummm uhh uhm ahh ohh yeah yep yup nope nah okey kinda sorta gonna wanna gotta lemme gimme dunno cuz cos bcs thanks thankyou pleez plss ugh meh yay woo wow oops aha heh hehe haha'.split(' '));
+let NLP_LEX = null, NLP_ENG = null;
+function nlpLexicon() {
+  if (NLP_LEX) return NLP_LEX;
+  const words = new Set(), add = (s) => String(s).toLowerCase().split(/[\s-]+/).forEach((w) => { if (/^[a-z]{3,}$/.test(w)) words.add(w); });
+  SHAPE_KEYS.forEach(add); COLOR_NAMES.forEach(add); Object.keys(DATA.SIZES).forEach(add); Object.keys(DIRS).forEach(add);
+  'add create make delete remove erase destroy move shift nudge slide paint color colour recolor recolour repaint rotate spin bounce pulse wobble orbit shrink enlarge expand scale resize duplicate clone bigger smaller larger taller shorter undo redo clear zoom place build spawn insert generate replace change stack flip tilt'.split(' ').forEach(add);
+  NLP_LEX = { all: words, long: [...words].filter((w) => w.length >= 4) };
+  return NLP_LEX;
+}
+/** Every word the engine itself understands: never "repair" these. */
+function nlpEngineWords() {
+  if (NLP_ENG) return NLP_ENG;
+  const hv = (s) => String(s).toLowerCase().match(/[a-z]{3,}/g) || [];
+  NLP_ENG = new Set([...hv(JSON.stringify(DATA)), ...hv(EDIT_RE.source), ...hv(REF_RE.source), ...hv(ALL_RE.source), ...hv(MOVE_VERB_RE.source), ...hv(ENV_WORD_RE.source), ...hv(NEG_RE.source), ...hv(QUESTION_RE.source), ...hv(INSPECT_RE.source), ...hv(STOP_RE.source), ...hv(INDEF_RE.source),
+    ...FINISH_WORDS.flatMap(([, re]) => hv(re.source)), ...TEXTURE_WORDS.flatMap(([, re]) => hv(re.source)), ...Object.values(ANIMS).flatMap((a) => a.w.flatMap(hv)), ...hv(JSON.stringify(MOODS)), ...Object.keys(MOOD_ALIAS).flatMap(hv),
+    ...Object.values(PHRASEBOOK).flat().flatMap(hv), ...hv(HELP), ...hv(vocab()), ...STARTER_COMMANDS.flatMap(hv), ...Object.keys(TEMPLATES).flatMap(hv), ...hv(JSON.stringify(TPL_ALIAS)), ...hv(JSON.stringify(SKY_PRESETS))]);
+  return NLP_ENG;
+}
+function nlpDL(a, b) {
+  const d = [];
+  for (let i = 0; i <= a.length; i++) { d[i] = [i]; }
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
+}
+function nlpKnown(w, lex) {
+  if (lex.all.has(w) || NLP_COLLIDE.has(w) || NLP_SLANG.has(w) || nlpEngineWords().has(w)) return true;
+  return [w.replace(/s$/, ''), w.replace(/es$/, ''), w.replace(/ies$/, 'y'), w.replace(/ed$/, ''), w.replace(/ed$/, 'e'), w.replace(/ing$/, ''), w.replace(/ing$/, 'e'), w.replace(/(.)\1ing$/, '$1'), w.replace(/(.)\1ed$/, '$1'), w.replace(/ly$/, ''), w.replace(/ish$/, ''), w.replace(/er$/, ''), w.replace(/est$/, '')]
+    .some((s, k) => s !== w && s.length >= (k >= 9 ? 4 : 3) && (lex.all.has(s) || nlpEngineWords().has(s)));
+}
+function nlpRepair(text, scene) {
+  const lex = nlpLexicon(), fixes = [];
+  const names = new Set((scene.objects || []).map((o) => o.name).filter(Boolean).map((n) => String(n).toLowerCase()));
+  const m0 = /\b(?:called|named|saying|says|reading|reads|titled|spelling|text|label|caption)\b|["“”]/.exec(text.toLowerCase());
+  const cut = m0 ? m0.index : text.length, head = text.slice(0, cut);
+  const out = head.replace(/[A-Za-z]+/g, (tok, off) => {
+    const w = tok.toLowerCase();
+    if (w.length < 3 || w.length > 12 || names.has(w) || nlpKnown(w, lex)) return tok;
+    const b = head[off - 1], a = head[off + tok.length];
+    if ((b && /[\d'’]/.test(b)) || (a && /[\d'’]/.test(a))) return tok;
+    let cands = [];
+    for (const l of lex.long) {
+      if (Math.abs(l.length - w.length) > 1) continue;
+      if (w.length === 3 && (l[0] !== w[0] || l.length !== 4)) continue;
+      if (nlpDL(w, l) === 1) cands.push(l);
+    }
+    if (!cands.length) return tok;
+    if (cands.length > 1) {
+      const lcp = (x, y) => { let k = 0; while (k < x.length && k < y.length && x[k] === y[k]) k++; return k; };
+      const score = (l) => (l.split('').sort().join('') === w.split('').sort().join('') ? 100 : 0) + lcp(l, w) * 3 + (l[l.length - 1] === w[w.length - 1] ? 1 : 0);
+      cands.sort((x, y) => score(y) - score(x));
+      if (score(cands[0]) === score(cands[1])) return tok;
+    }
+    fixes.push(`${w}→${cands[0]}`);
+    return /^[A-Z]/.test(tok) ? cands[0][0].toUpperCase() + cands[0].slice(1) : cands[0];
+  });
+  return { text: out + text.slice(cut), fixes };
+}
+
+/** Last line of defence: a NaN / absurd value must never reach the exported X3D. */
+function nlpSanitize(scene) {
+  const fin = (v, d, lo, hi) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+  if (scene.objects.length > 500) scene.objects.length = 500;
+  for (const o of scene.objects) {
+    o.size = fin(o.size, 0.8, 0.01, 100);
+    o.position = Array.isArray(o.position) && o.position.length === 3 ? o.position.map((v) => fin(v, 0, -1000, 1000)) : [0, 0, 0];
+    if (Array.isArray(o.stretch)) o.stretch = o.stretch.map((v) => fin(v, 1, 0.05, 50));
+    if (Array.isArray(o.rotation)) o.rotation = o.rotation.map((v) => fin(v, 0, -1e4, 1e4));
+  }
+}
+
 function runOne(scene, text) {
+  try { const c = nlpCanon(text, scene); if (c !== text.trim()) text = c; } catch (e) { /* keep original */ }
   let t = text.trim(), tl = t.toLowerCase();
   const sb = tl.match(/^(?:(?:i think|i want|i'd like|i would like)\s+)?(?:the\s+|my\s+)?(.+?)\s+(?:should|must|needs? to|ought to|has to)\s+(?:be|become)\s+(.+)$/);
   if (sb && scene.objects.length) { t = 'make the ' + sb[1] + ' ' + sb[2]; tl = t.toLowerCase(); }
@@ -2007,6 +2276,11 @@ function runOne(scene, text) {
 }
 
 function execute(scene, text) {
+  if (EXEC_DEPTH >= 10) return { status: 'info', message: 'That command nests too deeply.' };
+  EXEC_DEPTH++;
+  try { return execute0(scene, text); } finally { EXEC_DEPTH--; }
+}
+function execute0(scene, text) {
   const orig = text.trim(), t = orig.toLowerCase();
   const ok = (message, extra) => ({ status: 'success', message, ...extra });
   const info = (message) => ({ status: 'info', message });
@@ -2062,6 +2336,8 @@ function execute(scene, text) {
   if (/\b(remove|delete|take away|get rid of|pop|erase|trash)\b/.test(t) && !/\b(fog|sky|ground|floor|shadow|axes|stars|spot ?lights?|lights?)\b/.test(t)) {
     if (!scene.objects.length) return info('Nothing to remove.');
     if (shapesInText.length) return info(`I couldn't find a matching ${shapeLabel(shapesInText[0].shape)} to remove.`);
+    const leftover = t.replace(/\b(?:remove|delete|take away|get rid of|pop|erase|trash)\b/g, ' ').replace(/\b(?:the|a|an|my|that|this|last|latest|newest|previous|recent|one|shape|object|thing|item|it|please|now|just|again|from|scene|here|there)\b/g, ' ').trim();
+    if (leftover) return info(`I couldn't tell what "${leftover}" refers to, so I deleted nothing. Try naming a shape or colour: delete the red cube.`);
     const gone = scene.objects.pop();
     return ok(`Removed last shape (${shapeLabel(gone.shape)}).`);
   }
@@ -2109,8 +2385,17 @@ function setLighting(scene, preset) {
 
 /** Applies a prompt to the scene. Returns { status, message } (status 'pending' means: load an archive scene). */
 function runCommand(scene, text) {
+  let fixes = [];
+  try { const rp = nlpRepair(String(text), scene); text = rp.text; fixes = rp.fixes; } catch (e) { text = String(text); }
+  try { text = nlpDistribute(nlpCanon(text, scene)); } catch (e) { /* keep */ }
+  const r = runCommand0(scene, text);
+  try { nlpSanitize(scene); } catch (e) { /* keep */ }
+  if (fixes.length && r && r.message) r.message = '(read ' + fixes.join(', ') + ') ' + r.message;
+  return r;
+}
+function runCommand0(scene, text) {
   const before = JSON.stringify(scene);
-  const parts = splitClauses(text);
+  const parts = nlpInherit(splitClauses(text));
   if (parts.length <= 1) {
     const r = runOne(scene, text);
     if (r.status === 'success' && !r.noHistory) scene.pushUndo(before);
@@ -2127,12 +2412,12 @@ function runCommand(scene, text) {
 
 /* ── Built-in phrasebook. The SAME lists drive "vocab" (what it knows) and "selftest" (proof that it works). ── */
 const PHRASEBOOK = {
-  add: ['add', 'create', 'make me', 'give me', 'put', 'place', 'spawn', 'drop in', 'I want', "I'd like", 'can you add', 'please add', 'throw in', 'insert', 'build', 'draw', 'generate', 'show me', 'toss in', 'set up', 'I need', "let's have", 'could you make', 'gimme'],
-  recolor: ['paint the {s} {c}', 'color the {s} {c}', 'colour the {s} {c}', 'turn the {s} {c}', 'make the {s} {c}', 'change the {s} to {c}', 'change the {s} color to {c}', 'tint the {s} {c}', 'dye the {s} {c}', 'recolor the {s} {c}', 'switch the {s} to {c}', 'the {s} should be {c}', 'I want the {s} {c}', 'set the {s} to {c}', 'make the {s} look {c}', 'repaint the {s} {c}', 'give the {s} a {c} color', 'the {s} needs to be {c}'],
-  delete: ['delete the {s}', 'remove the {s}', 'erase the {s}', 'destroy the {s}', 'get rid of the {s}', 'kill the {s}', 'trash the {s}', 'take away the {s}', 'discard the {s}', 'ditch the {s}', 'eliminate the {s}', 'dispose of the {s}', 'take out the {s}', "I don't want the {s}", 'lose the {s}', 'clear the {s}', 'wipe out the {s}', 'delete {s}', 'remove that {s}'],
-  bigger: ['make the {s} bigger', 'enlarge the {s}', 'grow the {s}', 'expand the {s}', 'scale up the {s}', 'inflate the {s}', 'increase the size of the {s}', 'blow up the {s}', 'make the {s} larger', 'make the {s} huge', 'make the {s} twice as big', 'double the {s}', 'boost the {s}', 'magnify the {s}', 'the {s} is too small', 'make the {s} a lot bigger', 'scale the {s} by 2', 'resize the {s} to size 2'],
-  smaller: ['make the {s} smaller', 'shrink the {s}', 'reduce the {s}', 'scale down the {s}', 'make the {s} tiny', 'make the {s} half the size', 'halve the {s}', 'decrease the {s}', 'the {s} is too big', 'make the {s} a bit smaller', 'diminish the {s}', 'minimize the {s}', 'make the {s} little'],
-  move: ['move the {s} {d}', 'shift the {s} {d}', 'nudge the {s} {d}', 'push the {s} {d}', 'slide the {s} {d}', 'shove the {s} {d}', 'send the {s} {d}', 'bring the {s} {d}', 'relocate the {s} {d}', 'move the {s} a bit {d}', 'move the {s} {d} 2 units', 'put the {s} {d}', 'scoot the {s} {d}', 'shift the {s} over {d}', 'move the {s} to the {d}', 'lift the {s} {d}', 'carry the {s} {d}'],
+  add: ['add', 'create', 'make me', 'give me', 'put', 'place', 'spawn', 'drop in', 'I want', "I'd like", 'can you add', 'please add', 'throw in', 'insert', 'build', 'draw', 'generate', 'show me', 'toss in', 'set up', 'I need', "let's have", 'could you make', 'gimme', 'how about', 'can we get', 'pop in', 'whip up', 'we need'],
+  recolor: ['paint the {s} {c}', 'color the {s} {c}', 'colour the {s} {c}', 'turn the {s} {c}', 'make the {s} {c}', 'change the {s} to {c}', 'change the {s} color to {c}', 'tint the {s} {c}', 'dye the {s} {c}', 'recolor the {s} {c}', 'switch the {s} to {c}', 'the {s} should be {c}', 'I want the {s} {c}', 'set the {s} to {c}', 'make the {s} look {c}', 'repaint the {s} {c}', 'give the {s} a {c} color', 'the {s} needs to be {c}', "I'd like the {s} to be {c}", 'the {s} is now {c}', 'shade the {s} {c}', 'the {s} would look better {c}'],
+  delete: ['delete the {s}', 'remove the {s}', 'erase the {s}', 'destroy the {s}', 'get rid of the {s}', 'kill the {s}', 'trash the {s}', 'take away the {s}', 'discard the {s}', 'ditch the {s}', 'eliminate the {s}', 'dispose of the {s}', 'take out the {s}', "I don't want the {s}", 'lose the {s}', 'clear the {s}', 'wipe out the {s}', 'delete {s}', 'remove that {s}', 'bin the {s}', 'zap the {s}', 'nix the {s}', 'the {s} has to go', 'get the {s} out of here', 'make the {s} disappear', 'throw away the {s}', 'take the {s} out of the scene'],
+  bigger: ['make the {s} bigger', 'enlarge the {s}', 'grow the {s}', 'expand the {s}', 'scale up the {s}', 'inflate the {s}', 'increase the size of the {s}', 'blow up the {s}', 'make the {s} larger', 'make the {s} huge', 'make the {s} twice as big', 'double the {s}', 'boost the {s}', 'magnify the {s}', 'the {s} is too small', 'make the {s} a lot bigger', 'scale the {s} by 2', 'resize the {s} to size 2', 'upsize the {s}', 'scale the {s} up', 'bump up the {s}', 'the {s} is tiny', 'the {s} could be larger', 'give the {s} more size'],
+  smaller: ['make the {s} smaller', 'shrink the {s}', 'reduce the {s}', 'scale down the {s}', 'make the {s} tiny', 'make the {s} half the size', 'halve the {s}', 'decrease the {s}', 'the {s} is too big', 'make the {s} a bit smaller', 'diminish the {s}', 'minimize the {s}', 'make the {s} little', 'downsize the {s}', 'scale the {s} down', 'the {s} is enormous', 'make the {s} not so big', 'take the {s} down a size'],
+  move: ['move the {s} {d}', 'shift the {s} {d}', 'nudge the {s} {d}', 'push the {s} {d}', 'slide the {s} {d}', 'shove the {s} {d}', 'send the {s} {d}', 'bring the {s} {d}', 'relocate the {s} {d}', 'move the {s} a bit {d}', 'move the {s} {d} 2 units', 'put the {s} {d}', 'scoot the {s} {d}', 'shift the {s} over {d}', 'move the {s} to the {d}', 'lift the {s} {d}', 'carry the {s} {d}', 'the {s} should go {d}', 'take the {s} {d}', 'bump the {s} {d}', 'drag the {s} {d}'],
   animate: ['make the {s} {a}', '{a} the {s}', 'let the {s} {a}', 'have the {s} {a}', 'the {s} should {a}', 'animate the {s} to {a}', 'make the {s} start to {a}', 'get the {s} to {a}'],
   ask: ['what color is the {s}', 'where is the {s}', 'how big is the {s}', 'is there a {s}', 'do I have a {s}', 'how many {s}s are there', 'which one is the {s}', 'tell me about the {s}', 'what is the {s}', 'can you tell me where the {s} is', 'how tall is the {s}', 'what size is the {s}', 'is the {s} red', 'are there any {s}s', "what's the {s} doing", 'does the {s} spin', 'show me the {s}', 'where did the {s} go', 'how many objects are there', 'what do I have'],
 };
@@ -2200,7 +2485,7 @@ function selfTest() {
   return lines.join('\n');
 }
 
-return { DATA, Scene, runCommand, describe, details, vocab, selfTest };
+return { DATA, Scene, runCommand, describe, details, vocab, selfTest, _nl: { lexicon: () => [...nlpLexicon().long], repair: nlpRepair, canon: nlpCanon } };
 })();
 
 /* ═══ Kähler surface generators ═══ */
