@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31r · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31s · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -3048,7 +3048,7 @@ ${pad}${tgt}</Scene></X3D>`;
           b.onclick = () => { inp.value += (inp.value ? ' ' : '') + b.textContent; }; row.appendChild(b); }); feed.appendChild(row); });
       const note = document.createElement('div'); note.style.marginTop = '8px'; note.textContent = 'Numbers also work: "5-joint", "ball to 3 1", "pad to -2 1". Small typos are fixed automatically.'; feed.appendChild(note); return; }
     if (/^misses$/.test(t0)) { feed.textContent = MISSES.length ? 'Phrases I did not understand:\n' + MISSES.slice(-10).join('\n') : 'No misses yet.'; return; }
-    const t = norm(repair(t0)), did = []; let shape = false, heldNote = false, m;
+    const t = norm(repair(t0)), did = []; let shape = false, built = false, heldNote = false, m;
     if ((m = t.match(/\b(\d|one|two|three|four|five|six)[- ]?(?:joint|dof|axis|axes|link|segment)s?\b/))) { S.n = Math.max(2, Math.min(6, W[m[1]] || +m[1])); while (S.ang.length < S.n) S.ang.push(-.6); did.push(S.n + ' joints'); shape = true; }
     for (const k in COL) if (new RegExp('\\b' + k + '\\b(?! (?:pad|zone))').test(t)) { S.pal = COL[k]; did.push(COL[k]); shape = true; break; }
     if (/\b(?:no|without)\s+(?:a\s+)?(?:gripper|claw)\b/.test(t)) { S.grip = false; did.push('no gripper'); shape = true; }
@@ -3062,10 +3062,10 @@ ${pad}${tgt}</Scene></X3D>`;
     if (S.held && /\bball\s*(?:to|at)\b/.test(t)) heldNote = true;
     if ((m = t.match(new RegExp('(?:pad|zone)\\s*(?:to|at)\\s*' + N + sep + N)))) { S.dx = +m[1]; S.dz = +m[2]; did.push('drop zone moved'); }
     const wantsNew = !shape && ((/\b(?:generate|create|make|build|add|new)\b/.test(t) && /\b(?:armature|robot|manipulator|arm)\b/.test(t)) || /^generate\b/.test(t));
-    if (/\b(random|surprise me)\b/.test(t)) { await generate(false); did.push('random robot'); }
+    if (/\b(random|surprise me)\b/.test(t)) { await generate(false); did.push('random robot'); built = true; }
     else if (shape || wantsNew) {
       if (wantsNew) { Object.assign(S, { n: 3, len: 2, taper: .8, grip: true, pal: 'orange', yaw: 0, ang: [-.5, -1, -1.2] }); did.push('new armature (3 joints, orange; say more to change it)'); }
-      seq++; S.held = false; S.g = 0; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); build(); clearTimeout(timer); await render();
+      seq++; S.held = false; S.g = 0; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); build(); clearTimeout(timer); await render(); built = true;
     }
     else if (did.length) { build(); live(); }
     await settle();
@@ -3082,6 +3082,11 @@ ${pad}${tgt}</Scene></X3D>`;
       else if (a === 'reach') { ui$('.rbsolve').click(); await sleep(1000); did.push('solved IK to the ball'); }
       else if (a === 'wave') { const mo = ui$('.mot'); if (mo && !mo.checked) { mo.checked = true; mo.onchange(); } did.push('motion on'); }
       else if (a === 'stop') { seq++; const mo = ui$('.mot'); if (mo && mo.checked) { mo.checked = false; mo.onchange(); } did.push('stopped'); }
+    }
+    /* Go = generate what was described AND finish the job. If the sentence spells out its own steps, only those run (above). */
+    if (built && !acts.length && !failed && S.grip) {
+      did.push('solved IK to the ball');
+      if (await pick()) { did.push('picked up the ball'); if (await place()) did.push('placed it on the pad'); else failed = 'place'; } else failed = 'pick';
     }
     const ignored = [...new Set((t.match(/[a-z]{3,}/g) || []).filter((w) => !KNOWN.includes(w)))].slice(0, 6);
     if (did.length || failed) { feed.textContent = (t !== t0 ? 'Read as "' + t + '". ' : '') + 'Did: ' + (did.join(', ') || 'nothing yet') + '.' + (failed ? '\nStopped at "' + failed + '": ' + MSG.textContent : '') + (ignored.length ? '\nIgnored (not in my vocabulary): ' + ignored.join(', ') + '. Type "vocab" to see what I know.' : ''); inp.value = ''; return; }
@@ -3210,6 +3215,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31s  Robotics: Go generates what you typed AND finishes the job (solve IK, pick up the ball, place it); spelled-out steps run as written',
   '2026-10-31r  Robotics: restored pills, Generate, Enter, live sliders and Agent hand-off; kept only the fix that Go follows the sentence',
   '2026-10-31q  Robotics: pills work again; only pills that build a robot wait for Go, help/vocab/move/pick/place/wave/stop run on tap',
   '2026-10-31p  Robotics: ONLY the Go button builds or renders; chips, Generate, Enter and the Agent console just fill the box; shape sliders stage until Go',
