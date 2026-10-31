@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31s · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31u · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -2994,7 +2994,7 @@ ${pad}${tgt}</Scene></X3D>`;
   }
   /* ── Prompt box: plain phrase matching, no network ── */
   const PROMPT = document.createElement('div');
-  PROMPT.innerHTML = '<h2 class="cap">Describe it — or tap a chip</h2><div style="display:flex;gap:6px"><input id="rbText" type="text" enterkeyhint="go" autocomplete="off" autocapitalize="off" placeholder="5-joint teal arm, then pick up the ball" style="flex:1;min-width:0;font-size:16px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)"><button type="button" class="hbtn" id="rbGo">Go</button></div><div id="rbFeed" style="color:var(--muted);margin-top:4px;white-space:pre-wrap"></div><div id="rbChips" style="margin-top:8px"></div>';
+  PROMPT.innerHTML = '<h2 class="cap">Describe it — or tap a chip</h2><div style="display:flex;gap:6px"><input id="rbText" type="text" enterkeyhint="go" autocomplete="off" autocapitalize="off" placeholder="Press Go to build an armature and finish the task — or describe your own" style="flex:1;min-width:0;font-size:16px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)"><button type="button" class="hbtn" id="rbGo">Go</button></div><div id="rbFeed" style="color:var(--muted);margin-top:4px;white-space:pre-wrap"></div><div id="rbChips" style="margin-top:8px"></div>';
   const CH = [
     ['Build the robot', ['3-joint orange arm', '5-joint teal arm', '6-joint violet arm', 'long slim arm', 'short tapered arm', 'no gripper', 'gripper', 'random']],
     ['Move things', ['ball to 3 1', 'ball to -2 2', 'ball to 1.5 3', 'pad to -3 1', 'pad to 2 -2']],
@@ -3032,13 +3032,13 @@ ${pad}${tgt}</Scene></X3D>`;
   new MutationObserver(() => { if (working > 0 && MSG.textContent) FEED().textContent = 'Working… ' + MSG.textContent; }).observe(MSG, { childList: true, characterData: true, subtree: true });
   async function run(cmd) {
     const feed = FEED(), shown = (cmd !== undefined ? cmd : PROMPT.querySelector('#rbText').value).trim();
-    if (!shown) { feed.textContent = 'Type a command first, or tap a chip below.'; return; }
-    working++; feed.textContent = 'Working on “' + shown + '”…';
+    if (!shown) cmd = 'generate an armature';   // nothing typed: Go builds the default armature and finishes the whole task
+    working++; feed.textContent = shown ? 'Working on “' + shown + '”…' : 'Box is empty, so: generating an armature, solving IK, picking up the ball, placing it…';
     try { await runInner(cmd); } catch (e) { feed.textContent = 'Something went wrong: ' + (e && e.message ? e.message : e); console.error(e); } finally { working--; }
   }
   async function runInner(cmd) {
     const inp = PROMPT.querySelector('#rbText'), feed = PROMPT.querySelector('#rbFeed'), t0 = (cmd !== undefined ? cmd : inp.value).toLowerCase().trim();
-    if (!t0) return; feed.textContent = '';
+    if (!t0) return;   // (the wrapper already put “Working on…” in the feed; keep it visible)
     if (/^(help|\?|commands|examples?|what can (?:you|i) (?:do|say))$/.test(t0)) { feed.textContent = HELP; return; }
     if (/^(vocab|vocabulary|words|what words do you (?:know|understand))$/.test(t0)) {
       feed.textContent = 'Everything I understand. Tap a word to add it to the box:';
@@ -3215,6 +3215,8 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31u  Robotics: page opened or reloaded at #robotics lands on the Robotics tab; Working message stays visible after Go',
+  '2026-10-31t  Robotics: pressing Go with an empty box generates an armature and completes the task (IK, pick, place)',
   '2026-10-31s  Robotics: Go generates what you typed AND finishes the job (solve IK, pick up the ball, place it); spelled-out steps run as written',
   '2026-10-31r  Robotics: restored pills, Generate, Enter, live sliders and Agent hand-off; kept only the fix that Go follows the sentence',
   '2026-10-31q  Robotics: pills work again; only pills that build a robot wait for Go, help/vocab/move/pick/place/wave/stop run on tap',
@@ -3433,6 +3435,7 @@ writeJSON(STORE_STARTER, true);
 const hash = location.hash.slice(1);
 let firstLoad;
 if (SURFACES[hash]) { updateInfo(hash); updateActive(hash); currentSurface = hash; firstLoad = setMode('kahler'); }
+else if (hash === 'robotics') { firstLoad = setMode('robotics'); }   // reloading the page at #robotics reopens the Robotics tab
 else { updateInfo(currentSurface); updateActive(currentSurface); firstLoad = setMode('agent'); }
 if (wantStarter) {
   Promise.race([firstLoad, new Promise((r) => setTimeout(r, 3000))]).then(() => {
