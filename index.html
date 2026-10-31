@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31b · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31c · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -2803,7 +2803,7 @@ document.querySelector('.modes').addEventListener('click', (e) => {
 /* ───────── Robotics: parametric robot generator ───────── */
 const Robo = (() => {
   const PAL = { orange:[1,.55,.1], teal:[.1,.8,.75], violet:[.62,.4,1], lime:[.5,.9,.2] };
-  const S = { n:3, len:2, taper:.8, grip:true, pal:'orange', yaw:0, ang:[-.5,-1,-1.2], tx:2.5, ty:1.5, tz:1, tgt:true, LIM:2.6 };
+  const S = { n:3, len:2, taper:.8, grip:true, pal:'orange', yaw:0, ang:[-.5,-1,-1.2], tx:2.4, ty:.2, tz:1.2, tgt:true, LIM:2.6, g:0, held:false };
   const f = (v) => (+v).toFixed(4);
   const mat = (c, e=0) => `<Appearance><Material diffuseColor="${c.map(f).join(' ')}" specularColor=".5 .5 .5" shininess=".5" emissiveColor="${c.map(v=>f(v*e)).join(' ')}"/></Appearance>`;
   function lookAt(p, t) {
@@ -2813,6 +2813,7 @@ const Robo = (() => {
     const v = [cy*sx, cx*sy, -sy*sx], w = cy*cx, n = Math.hypot(...v) || 1;
     return { pos: p, ori: [v[0]/n, v[1]/n, v[2]/n, 2*Math.acos(Math.min(1, w))] };
   }
+  function lens0(){}
   const lens = () => Array.from({length:S.n}, (_,i) => S.len * Math.pow(S.taper, i));
   const rads = () => Array.from({length:S.n}, (_,i) => .2 * Math.pow(S.taper, i));
   function x3d() {
@@ -2826,7 +2827,7 @@ const Robo = (() => {
       chain = `<Transform DEF="J${i}" translation="0 ${i===0?.6:f(L[i-1])} 0" rotation="0 0 1 ${f(S.ang[i])}"><Shape><Sphere radius="${f(R[i]*1.5)}"/>${mat(c,.15)}</Shape>${link}${next}</Transform>`;
       if (i > 0) chain = chain; 
     }
-    const tgt = S.tgt ? `<Transform DEF="Tgt" translation="${f(S.tx)} ${f(S.ty)} ${f(S.tz)}"><Shape><Sphere radius=".14"/><Appearance><Material diffuseColor="1 .3 .3" emissiveColor="1 .2 .2" transparency=".3"/></Appearance></Shape></Transform>` : '';
+    const bp = ball(), tgt = `<Transform DEF="Tgt" translation="${bp.map(f).join(' ')}"><Shape><Sphere radius=".2"/><Appearance><Material diffuseColor="1 .3 .3" emissiveColor=".6 .1 .1" specularColor="1 1 1" shininess=".8"/></Appearance></Shape></Transform>`;
     return `<?xml version="1.0" encoding="UTF-8"?><X3D profile="Immersive" version="3.3"><head><meta name="generator" content="X3D Studio Robotics"/></head><Scene>
 <NavigationInfo type='"EXAMINE" "ANY"' headlight="false"/><Background skyColor="0.02 0.02 0.07, 0.1 0.12 0.25" skyAngle="1.5708"/>
 <Viewpoint description="Iso" position="${cam.pos.map(f).join(' ')}" orientation="${cam.ori.map(f).join(' ')}" centerOfRotation="0 ${f(S.len)} 0"/>
@@ -2836,27 +2837,30 @@ const Robo = (() => {
 <Transform DEF="Yaw" translation="0 .3 0" rotation="0 1 0 ${f(S.yaw)}"><Transform translation="0 .15 0"><Shape><Cylinder radius=".5" height=".3"/>${mat(dark)}</Shape></Transform>${chain}</Transform>
 ${tgt}</Scene></X3D>`;
   }
+  const H = .6, SH = .9;   // grasp point = hand origin + H along the last link; shoulder height SH
   function hand(c, dark, l) {
     if (!S.grip) return '';
-    const fg = (x, a) => `<Transform translation="${x} .3 0" rotation="0 0 1 ${a}"><Transform translation="0 .3 0"><Shape><Box size=".12 .6 .16"/>${mat(c)}</Shape></Transform></Transform>`;
-    return `<Transform translation="0 ${f(l)} 0"><Shape><Box size=".9 .25 .4"/>${mat(dark)}</Shape>${fg(-.31,.49)}${fg(.31,-.49)}</Transform>`;
+    const fx = .38 - .12 * S.g, fa = .35 * (1 - S.g);
+    const fg = (id, x, a) => `<Transform DEF="${id}" translation="${f(x)} .3 0" rotation="0 0 1 ${f(a)}"><Transform translation="0 .3 0"><Shape><Box size=".12 .6 .16"/>${mat(c)}</Shape></Transform></Transform>`;
+    return `<Transform translation="0 ${f(l)} 0"><Shape><Box size=".9 .25 .4"/>${mat(dark)}</Shape>${fg('FL', -fx, fa)}${fg('FR', fx, -fa)}</Transform>`;
   }
-  /* IK: base yaw aims at the target, planar CCD solves the chain in that vertical plane */
-  function solve() {
-    const L = lens(), h = .6 + .3, t = [Math.hypot(S.tx, S.tz), S.ty - h];
-    S.yaw = Math.atan2(-S.tz, S.tx);
+  const pts = (a) => { const L = lens(); let A = 0, x = 0, y = 0; const P = [[0, 0]];
+    for (let i = 0; i < S.n; i++) { A += a[i]; x += -Math.sin(A) * L[i]; y += Math.cos(A) * L[i]; P.push([x, y]); }
+    P.push([x - Math.sin(A) * H, y + Math.cos(A) * H]); return P; };
+  function grasp() { const e = pts(S.ang)[S.n + 1]; return [e[0] * Math.cos(S.yaw), SH + e[1], -e[0] * Math.sin(S.yaw)]; }
+  const ball = () => S.held ? grasp() : [S.tx, S.ty, S.tz];
+  /* IK: base yaw aims at the target; planar CCD puts the GRASP POINT (between the fingers) on it */
+  function solve(x = S.tx, y = S.ty, z = S.tz) {
+    const t = [Math.hypot(x, z), y - SH]; S.yaw = Math.atan2(-z, x);
     const a = S.ang.slice(0, S.n);
-    const tip = () => { let A = 0, x = 0, y = 0; const P = [[0,0]];
-      for (let i = 0; i < S.n; i++) { A += a[i]; x += -Math.sin(A) * L[i]; y += Math.cos(A) * L[i]; P.push([x,y]); } return P; };
     for (let it = 0; it < 80; it++) for (let j = S.n - 1; j >= 0; j--) {
-      const P = tip(), e = P[S.n], o = P[j];
+      const P = pts(a), e = P[S.n + 1], o = P[j];
       const d = Math.atan2(t[1]-o[1], t[0]-o[0]) - Math.atan2(e[1]-o[1], e[0]-o[0]);
       a[j] = Math.max(-S.LIM, Math.min(S.LIM, a[j] + Math.atan2(Math.sin(d), Math.cos(d))));
     }
-    S.ang = a;
-    const e = tip()[S.n]; return Math.hypot(e[0]-t[0], e[1]-t[1]);
+    S.ang = a; const e = pts(a)[S.n + 1]; return Math.hypot(e[0]-t[0], e[1]-t[1]);
   }
-  return { S, x3d, solve, PAL };
+  return { S, x3d, solve, grasp, ball, PAL };
 })();
 (() => {
   const S = Robo.S, ui = $('rbUI'); let timer = 0;
@@ -2868,7 +2872,9 @@ ${tgt}</Scene></X3D>`;
         const sc = (await viewer.ready).currentScene, R = (a) => new X3D.SFRotation(0, 0, 1, a);
         sc.getNamedNode('Yaw').rotation = new X3D.SFRotation(0, 1, 0, S.yaw);
         for (let i = 0; i < S.n; i++) sc.getNamedNode('J' + i).rotation = R(S.ang[i]);
-        sc.getNamedNode('Tgt').translation = new X3D.SFVec3f(S.tx, S.ty, S.tz);
+        const bp = Robo.ball(); sc.getNamedNode('Tgt').translation = new X3D.SFVec3f(bp[0], bp[1], bp[2]);
+        if (S.grip) { const fx = .38 - .12 * S.g, fa = .35 * (1 - S.g), L = sc.getNamedNode('FL'), Rr = sc.getNamedNode('FR');
+          L.translation = new X3D.SFVec3f(-fx, .3, 0); L.rotation = R(fa); Rr.translation = new X3D.SFVec3f(fx, .3, 0); Rr.rotation = R(-fa); }
       } while (want);
     } catch (e) { redraw(); }   // scene not ready or node missing: fall back to a reload
     busy = false;
@@ -2880,6 +2886,44 @@ ${tgt}</Scene></X3D>`;
     i.oninput = () => { set(+i.value); o.textContent = (+i.value).toFixed(2); LIVE.test(id) ? live() : redraw(); };
     l.dataset.id = id; return l;
   };
+  const MSG = document.createElement('div'); MSG.style.color = 'var(--muted)';
+  let seq = 0;
+  const wrap = (d) => Math.atan2(Math.sin(d), Math.cos(d));
+  const snap = () => ({ y: S.yaw, a: S.ang.slice(), g: S.g });
+  const tween = (p0, p1, ms, id) => new Promise((res) => { const t0 = performance.now();
+    const go = (t) => { if (id !== seq) return res(false); const k = Math.min(1, (t - t0) / ms), e = k * k * (3 - 2 * k);
+      S.yaw = p0.y + (p1.y - p0.y) * e; S.ang = p0.a.map((v, i) => v + (p1.a[i] - v) * e); S.g = p0.g + (p1.g - p0.g) * e; live();
+      k < 1 ? (tw = requestAnimationFrame(go)) : res(true); }; tw = requestAnimationFrame(go); });
+  async function move(x, y, z, g, ms, id) {
+    const p0 = snap(), err = Robo.solve(x, y, z), p1 = snap(); p1.g = g; p1.y = p0.y + wrap(p1.y - p0.y);
+    S.yaw = p0.y; S.ang = p0.a; S.g = p0.g;
+    const ok = await tween(p0, p1, ms, id); return ok ? err : 99;
+  }
+  async function pick() {
+    if (!S.grip) { MSG.textContent = 'Turn the gripper on first.'; return; }
+    if (S.held) { MSG.textContent = 'Already holding the ball.'; return; }
+    cancelAnimationFrame(anim); anim = 0; const id = ++seq, [x, y, z] = [S.tx, S.ty, S.tz];
+    MSG.textContent = 'Approaching…';
+    let e = await move(x, y + 1.1, z, 0, 900, id); if (e === 99) return;
+    if (e > .1) { MSG.textContent = 'Ball is out of reach. Move X/Y/Z closer or add a joint.'; return; }
+    if ((e = await move(x, y, z, 0, 700, id)) === 99) return;
+    if ((e = await move(x, y, z, 1, 450, id)) === 99) return;
+    S.held = true; MSG.textContent = 'Gripped. Lifting…';
+    if ((e = await move(x, y + 1.3, z, 1, 700, id)) === 99) return;
+    S.tx = -x; S.ty = y; S.tz = z; build(); MSG.textContent = 'Holding the ball. Set X/Y/Z where it should go, then press Place.';
+  }
+  async function place() {
+    if (!S.held) { MSG.textContent = 'Not holding anything. Press Pick up ball first.'; return; }
+    cancelAnimationFrame(anim); anim = 0; const id = ++seq, [x, y, z] = [S.tx, S.ty, S.tz];
+    MSG.textContent = 'Carrying…';
+    let e = await move(x, y + 1.3, z, 1, 900, id); if (e === 99) return;
+    if (e > .1) { MSG.textContent = 'Destination is out of reach.'; return; }
+    if ((e = await move(x, y, z, 1, 700, id)) === 99) return;
+    const g = Robo.grasp(); S.held = false; [S.tx, S.ty, S.tz] = g; live();
+    if ((e = await move(x, y, z, 0, 450, id)) === 99) return;
+    if ((e = await move(x, y + 1.3, z, 0, 700, id)) === 99) return;
+    build(); MSG.textContent = 'Placed.';
+  }
   function build() {
     ui.innerHTML = '<h2 class="cap">Generate</h2>';
     const add = (n) => ui.appendChild(n), fresh = (fn) => (v) => { fn(v); build(); redraw(); };
@@ -2899,19 +2943,22 @@ ${tgt}</Scene></X3D>`;
     add(sl('yaw','Base',-3.14,3.14,.02,()=>S.yaw,(v)=>S.yaw=v));
     for (let i = 0; i < S.n; i++) add(sl('j'+i,'Joint '+(i+1),-S.LIM,S.LIM,.02,()=>S.ang[i],(v)=>S.ang[i]=v));
     ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Reach target (IK)</h2>');
-    add(sl('tx','X',-6,6,.1,()=>S.tx,(v)=>S.tx=v)); add(sl('ty','Y',0,8,.1,()=>S.ty,(v)=>S.ty=v)); add(sl('tz','Z',-6,6,.1,()=>S.tz,(v)=>S.tz=v));
+    add(sl('tx','X',-6,6,.1,()=>S.tx,(v)=>S.tx=v)); add(sl('ty','Y',.2,8,.1,()=>S.ty,(v)=>S.ty=v)); add(sl('tz','Z',-6,6,.1,()=>S.tz,(v)=>S.tz=v));
     const b = document.createElement('button'); b.className = 'hbtn'; b.textContent = 'Solve IK → reach target';
-    const msg = document.createElement('div'); msg.style.color = 'var(--muted)';
-    b.onclick = () => { cancelAnimationFrame(anim); anim = 0; cancelAnimationFrame(tw); const y0 = S.yaw, a0 = S.ang.slice(); const err = Robo.solve(); const y1 = S.yaw, a1 = S.ang.slice(); S.yaw = y0; S.ang = a0; const t0 = performance.now();
+    const msg = MSG;
+    b.onclick = () => { seq++; cancelAnimationFrame(anim); anim = 0; cancelAnimationFrame(tw); const y0 = S.yaw, a0 = S.ang.slice(); const err = Robo.solve(); const y1 = S.yaw, a1 = S.ang.slice(); S.yaw = y0; S.ang = a0; const t0 = performance.now();
       const go = (t) => { const k = Math.min(1, (t - t0) / 800), e = k * k * (3 - 2 * k); S.yaw = y0 + (y1 - y0) * e; S.ang = a0.map((v, i) => v + (a1[i] - v) * e); live(); if (k < 1) tw = requestAnimationFrame(go); else { build(); ui.appendChild(msg); } }; tw = requestAnimationFrame(go);
       msg.textContent = err < .05 ? 'Reached target.' : 'Out of reach — closest pose shown (error ' + err.toFixed(2) + ').'; };
     add(b);
+    const bpk = document.createElement('button'); bpk.className = 'hbtn'; bpk.textContent = 'Pick up ball'; bpk.onclick = pick; add(bpk);
+    const bpl = document.createElement('button'); bpl.className = 'hbtn'; bpl.textContent = 'Place at target'; bpl.onclick = place; add(bpl);
+    add(msg);
   }
   const rnd = (a, b) => a + Math.random() * (b - a);
   $('rbRandom').onclick = () => {
     S.n = 2 + Math.floor(Math.random() * 5); S.len = +rnd(1.2, 2.4).toFixed(1); S.taper = +rnd(.65, 1).toFixed(2);
     S.pal = Object.keys(Robo.PAL)[Math.floor(Math.random() * 4)]; S.grip = Math.random() > .2; S.yaw = rnd(-1, 1);
-    S.ang = Array.from({length:S.n}, () => rnd(-1.3, 1.3)); build(); redraw();
+    S.ang = Array.from({length:S.n}, () => rnd(-1.3, 1.3)); seq++; S.held = false; S.g = 0; S.tx = 2.4; S.ty = .2; S.tz = 1.2; build(); redraw();
   };
   $('rbExport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([Robo.x3d()], {type:'model/x3d+xml'})); a.download = 'robot_' + S.n + 'dof.x3d'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
   build();
@@ -2974,6 +3021,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31c  Robotics: ball pick-and-place, gripper opens/closes, IK aims the grasp point',
   '2026-10-31b  Robotics: live joint updates (no reload), smooth IK, motion toggle',
   '2026-10-31a  Robotics mode: parametric robot generator, pose sliders, IK reach target, export .x3d',
   '2026-10-25a  selftest, vocab, misses log and version commands',
