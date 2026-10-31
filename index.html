@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31d · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31f · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -2926,8 +2926,68 @@ ${pad}${tgt}</Scene></X3D>`;
     if ((e = await move(x, y + 1.3, z, 0, 700, id)) === 99) return;
     build(); MSG.textContent = 'Placed.';
   }
+  /* ── Prompt box: plain phrase matching, no network ── */
+  const PROMPT = document.createElement('div');
+  PROMPT.innerHTML = '<h2 class="cap">Describe it — or tap a chip</h2><div style="display:flex;gap:6px"><input id="rbText" type="text" autocomplete="off" autocapitalize="off" placeholder="5-joint teal arm, then pick up the ball" style="flex:1;min-width:0;font-size:16px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)"><button type="button" class="hbtn" id="rbGo">Go</button></div><div id="rbFeed" style="color:var(--muted);margin-top:4px;white-space:pre-wrap"></div><div id="rbChips" style="margin-top:8px"></div>';
+  const CH = [
+    ['Build the robot', ['3-joint orange arm', '5-joint teal arm', '6-joint violet arm', 'long slim arm', 'short tapered arm', 'no gripper', 'gripper', 'random']],
+    ['Move things', ['ball to 3 1', 'ball to -2 2', 'ball to 1.5 3', 'pad to -3 1', 'pad to 2 -2']],
+    ['Do a task', ['pick up the ball', 'place it', 'pick up the ball and place it', 'reach', 'wave', 'stop']],
+    ['Help', ['help', 'vocab', 'misses']] ];
+  const chipBox = document.createElement('div');
+  CH.forEach(([title, items]) => { const g = document.createElement('div'); g.className = 'chip-group'; g.innerHTML = '<h2 class="cap">' + title + '</h2>';
+    const row = document.createElement('div'); row.className = 'chips';
+    items.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => run(c); row.appendChild(b); });
+    g.appendChild(row); chipBox.appendChild(g); });
+  const HELP = 'Build: "5-joint teal arm", "long slim arm", "short tapered arm", "no gripper", "random"\nColours: orange · teal · violet · lime\nMove: "ball to 3 1" (x z) · "ball to 3 0.5 1" (x y z) · "pad to -2 1"\nDo: "pick up the ball" · "place it" · "pick up the ball and place it" · "reach" · "wave" · "stop"\nCombine: "5-joint violet arm then pick up the ball"\nOther: help · vocab · misses · or just tap a chip below.';
+  const KNOWN = 'joint joints dof link links segment arm robot teal cyan aqua orange violet purple lime green gripper claw long longer tall big short shorter small compact slim uniform tapered taper ball pad zone pick grab grasp take place put drop deliver reach wave dance animate stop random surprise generate help vocab misses one two three four five six with then and the from into onto down that this please thanks would could want make build give show have like very just you can now its too for are not set get let use see add all any new red blue gold pink'.split(' ');
+  const lev = (a, b) => { const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]); for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1)); return d[a.length][b.length]; };
+  const repair = (t) => t.replace(/[a-z]{3,}/g, (w) => { if (KNOWN.includes(w)) return w; let best = w, bd = 9;
+    for (const k of KNOWN) { if (Math.abs(k.length - w.length) > 2) continue; const d = lev(w, k); if (d < bd) { bd = d; best = k; } }
+    return bd <= (w.length <= 4 ? 1 : 2) ? best : w; });
+  const MISSES = [];
+  const W = { one:1, two:2, three:3, four:4, five:5, six:6 }, COL = { orange:'orange', teal:'teal', cyan:'teal', aqua:'teal', violet:'violet', purple:'violet', lime:'lime', green:'lime' };
+  async function run(cmd) {
+    const inp = PROMPT.querySelector('#rbText'), feed = PROMPT.querySelector('#rbFeed'), t0 = (cmd !== undefined ? cmd : inp.value).toLowerCase().trim();
+    if (!t0) return; feed.textContent = '';
+    if (/^(help|\?|commands|examples?|what can (?:you|i) (?:do|say))$/.test(t0)) { feed.textContent = HELP; return; }
+    if (/^(vocab|vocabulary|words)$/.test(t0)) { feed.textContent = 'Words I know:\n' + KNOWN.slice(0, 66).join(' · '); return; }
+    if (/^misses$/.test(t0)) { feed.textContent = MISSES.length ? 'Phrases I did not understand:\n' + MISSES.slice(-10).join('\n') : 'No misses yet.'; return; }
+    const t = repair(t0), did = []; let shape = false, m;
+    if ((m = t.match(/\b(\d|one|two|three|four|five|six)[- ]?(?:joint|dof|axis|axes|link|segment)s?\b/))) { S.n = Math.max(2, Math.min(6, W[m[1]] || +m[1])); while (S.ang.length < S.n) S.ang.push(-.6); did.push(S.n + ' joints'); shape = true; }
+    for (const k in COL) if (new RegExp('\\b' + k + '\\b(?! (?:pad|zone))').test(t)) { S.pal = COL[k]; did.push(COL[k]); shape = true; break; }
+    if (/\b(?:no|without)\s+(?:a\s+)?(?:gripper|claw)\b/.test(t)) { S.grip = false; did.push('no gripper'); shape = true; }
+    else if (/\b(?:gripper|claw)\b/.test(t)) { S.grip = true; did.push('gripper'); shape = true; }
+    if (/\b(long|longer|tall|big)\b/.test(t)) { S.len = Math.min(3, S.len + .5); did.push('longer'); shape = true; }
+    if (/\b(short|shorter|small|compact)\b/.test(t)) { S.len = Math.max(.8, S.len - .5); did.push('shorter'); shape = true; }
+    if (/\b(slim|uniform)\b/.test(t)) { S.taper = .95; did.push('slim'); shape = true; }
+    if (/\btapered?\b/.test(t)) { S.taper = .65; did.push('tapered'); shape = true; }
+    const N = '(-?\\d+\\.?\\d*)', sep = '[ ,]+';
+    if ((m = t.match(new RegExp('ball\\s*(?:to|at)\\s*' + N + sep + N + '(?:' + sep + N + ')?'))) && !S.held) { S.tx = +m[1]; if (m[3] !== undefined) { S.ty = Math.max(.2, +m[2]); S.tz = +m[3]; } else { S.ty = .2; S.tz = +m[2]; } did.push('ball moved'); }
+    if ((m = t.match(new RegExp('(?:pad|zone)\\s*(?:to|at)\\s*' + N + sep + N)))) { S.dx = +m[1]; S.dz = +m[2]; did.push('drop zone moved'); }
+    if (/\b(random|surprise me)\b/.test(t) || (!shape && /\bgenerate\b/.test(t))) { $('rbRandom').click(); did.push('random robot'); }
+    else if (shape) { seq++; S.held = false; S.g = 0; build(); clearTimeout(timer); await render(); }
+    else if (did.length) { build(); live(); }
+    const ui$ = (q) => ui.querySelector(q);
+    if (/\bstop\b/.test(t)) { seq++; const mo = ui$('.mot'); if (mo && mo.checked) { mo.checked = false; mo.onchange(); } did.push('stopped'); }
+    if (/\b(wave|dance|animate)\b/.test(t)) { const mo = ui$('.mot'); if (mo && !mo.checked) { mo.checked = true; mo.onchange(); } did.push('motion on'); }
+    const doPick = /\b(pick|grab|grasp|take)\b/.test(t), doPlace = /\b(place|put|drop|deliver|set (?:it )?down)\b/.test(t);
+    if (doPick) { did.push('picking up'); inp.blur(); await pick(); }
+    if (doPlace) { did.push('placing'); inp.blur(); await place(); }
+    if (!doPick && !doPlace && /\breach\b/.test(t)) { did.push('reaching'); ui$('.rbsolve').click(); }
+    if (did.length) { feed.textContent = (t !== t0 ? 'Read as "' + t + '". ' : '') + 'Did: ' + did.join(', ') + '.'; inp.value = ''; return; }
+    MISSES.push(t0);
+    const words = new Set(t.split(/\W+/)), top = CH.flatMap(([, it]) => it).map((c) => [c.split(/\W+/).filter((w) => words.has(w)).length, c]).sort((a, b) => b[0] - a[0]).slice(0, 3).map((x) => x[1]);
+    feed.textContent = 'I didn\'t understand "' + t0 + '". Closest commands (tap one), or type "help":';
+    const row = document.createElement('div'); row.className = 'chips'; row.style.marginTop = '6px';
+    top.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => run(c); row.appendChild(b); }); feed.appendChild(row);
+  }
+  PROMPT.querySelector('#rbChips').appendChild(chipBox);
+  PROMPT.querySelector('#rbGo').onclick = () => run();
+  PROMPT.querySelector('#rbText').addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
   function build() {
-    ui.innerHTML = '<h2 class="cap">Generate</h2>';
+    ui.innerHTML = ''; ui.appendChild(PROMPT); ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Generate</h2>');
     const add = (n) => ui.appendChild(n), fresh = (fn) => (v) => { fn(v); build(); redraw(); };
     add(sl('n','Joints',2,6,1,()=>S.n,fresh((v)=>{ S.n=v; while(S.ang.length<v) S.ang.push(-.6); })));
     add(sl('len','Link length',.8,3,.1,()=>S.len,(v)=>S.len=v));
@@ -2936,7 +2996,7 @@ ${pad}${tgt}</Scene></X3D>`;
     row.querySelector('select').onchange = (e) => { S.pal = e.target.value; redraw(); }; add(row);
     const g = document.createElement('label'); g.innerHTML = '<span>Gripper</span><input type="checkbox"><span></span>'; const gi = g.querySelector('input'); gi.checked = S.grip; gi.onchange = () => { S.grip = gi.checked; redraw(); }; add(g);
     ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Pose</h2>');
-    const mt = document.createElement('label'); mt.innerHTML = '<span>Motion</span><input type="checkbox"><span></span>'; const mi = mt.querySelector('input'); mi.checked = !!anim;
+    const mt = document.createElement('label'); mt.innerHTML = '<span>Motion</span><input type="checkbox"><span></span>'; const mi = mt.querySelector('input'); mi.checked = !!anim; mi.className = 'mot';
     mi.onchange = () => { if (mi.checked) { const b0 = S.ang.slice(), y0 = S.yaw, t0 = performance.now();
         const step = (t) => { const k = (t - t0) / 1000; S.yaw = y0 + .7 * Math.sin(k * .6);
           S.ang = b0.map((a, i) => Math.max(-S.LIM, Math.min(S.LIM, a + .55 * Math.sin(k * 1.3 + i * .9)))); live(); anim = requestAnimationFrame(step); };
@@ -2948,7 +3008,7 @@ ${pad}${tgt}</Scene></X3D>`;
     add(sl('tx','X',-6,6,.1,()=>S.tx,(v)=>S.tx=v)); add(sl('ty','Y',.2,8,.1,()=>S.ty,(v)=>S.ty=v)); add(sl('tz','Z',-6,6,.1,()=>S.tz,(v)=>S.tz=v));
     ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Drop zone (green pad)</h2>');
     add(sl('dx','X',-6,6,.1,()=>S.dx,(v)=>S.dx=v)); add(sl('dz','Z',-6,6,.1,()=>S.dz,(v)=>S.dz=v));
-    const b = document.createElement('button'); b.className = 'hbtn'; b.textContent = 'Solve IK → reach target';
+    const b = document.createElement('button'); b.className = 'hbtn rbsolve'; b.textContent = 'Solve IK → reach target';
     const msg = MSG;
     b.onclick = () => { seq++; cancelAnimationFrame(anim); anim = 0; cancelAnimationFrame(tw); const y0 = S.yaw, a0 = S.ang.slice(); const err = Robo.solve(); const y1 = S.yaw, a1 = S.ang.slice(); S.yaw = y0; S.ang = a0; const t0 = performance.now();
       const go = (t) => { const k = Math.min(1, (t - t0) / 800), e = k * k * (3 - 2 * k); S.yaw = y0 + (y1 - y0) * e; S.ang = a0.map((v, i) => v + (a1[i] - v) * e); live(); if (k < 1) tw = requestAnimationFrame(go); else { build(); ui.appendChild(msg); } }; tw = requestAnimationFrame(go);
@@ -3025,6 +3085,8 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31f  Robotics: prompt chips, help/vocab/misses, typo repair, closest-command suggestions',
+  '2026-10-31e  Robotics: prompt box (joints, colour, gripper, size, ball/pad moves, pick, place, wave, random)',
   '2026-10-31d  Robotics: visible green drop zone with its own sliders; Place puts the ball on it',
   '2026-10-31c  Robotics: ball pick-and-place, gripper opens/closes, IK aims the grasp point',
   '2026-10-31b  Robotics: live joint updates (no reload), smooth IK, motion toggle',
