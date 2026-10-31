@@ -28,6 +28,8 @@
   --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px);
 }
 body[data-mode="kahler"] { --accent: #4f6ef7; --accent-l: #8da2ff; }
+body[data-mode="robotics"] { --accent: #f59e0b; --accent-l: #fcd34d; }
+.rb{padding:12px;display:flex;flex-direction:column;gap:7px;font-size:12px}.rb label{display:grid;grid-template-columns:78px 1fr 40px;gap:8px;align-items:center;color:var(--muted)}.rb input[type=range]{width:100%;accent-color:var(--accent)}.rb output{font-family:var(--mono);color:var(--text);text-align:right}.rb h2{margin-top:6px}.rb select{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px}
 html, body { height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
   font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
 button { font-family: inherit; color: inherit; }
@@ -186,6 +188,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
     <div class="modes" role="tablist" aria-label="App">
       <button type="button" class="mode" role="tab" data-mode="agent"  aria-selected="true">X3D Agent</button>
       <button type="button" class="mode" role="tab" data-mode="kahler" aria-selected="false">Kähler Viewer</button>
+      <button type="button" class="mode" role="tab" data-mode="robotics" aria-selected="false">Robotics</button>
     </div>
     <div class="header-actions" id="actionsAgent">
       <button type="button" class="hbtn" id="objToggle" aria-expanded="false">&#9776; Objects</button>
@@ -193,6 +196,10 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
       <button type="button" class="hbtn" data-cmd="redo">&#8631; Redo</button>
       <button type="button" class="hbtn" data-cmd="reset camera">&#8635; View</button>
       <button type="button" class="hbtn" id="exportBtn">Export .x3d</button>
+    </div>
+    <div class="header-actions" id="actionsRobotics" hidden>
+      <button type="button" class="hbtn" id="rbRandom">&#9860; Generate</button>
+      <button type="button" class="hbtn" id="rbExport">Export .x3d</button>
     </div>
     <div class="header-actions" id="actionsKahler" hidden>
       <button type="button" class="tag tag-k"  id="filterK"  aria-pressed="true">KÄHLER</button>
@@ -215,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-28a · NL++)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31a · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -230,6 +237,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
       </div>
 
       <!-- Kähler Viewer -->
+      <div class="mode-panel" id="panel-robotics" hidden><div class="scroll rb" id="rbUI"></div></div>
       <div class="mode-panel" id="panel-kahler" hidden>
         <div class="tabs" role="tablist" data-group="kahler">
           <button type="button" class="tab" role="tab" data-tab="surfaces" aria-selected="true" aria-controls="k-surfaces">Surfaces</button>
@@ -2771,6 +2779,7 @@ function render() {
     if (!$('objList').hidden) refreshObjList();
     return p;
   }
+  if (mode === 'robotics') return viewer.show(Robo.x3d());
   return viewer.show(Kahler.buildX3D(currentSurface, currentParam));
 }
 
@@ -2778,17 +2787,106 @@ function setMode(next, { skipRender = false } = {}) {
   mode = next;
   document.body.dataset.mode = next;
   document.querySelectorAll('.mode').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === next)));
-  $('panel-agent').hidden = next !== 'agent';$('panel-kahler').hidden = next !== 'kahler';
+  $('panel-agent').hidden = next !== 'agent';$('panel-kahler').hidden = next !== 'kahler';$('panel-robotics').hidden = next !== 'robotics';$('actionsRobotics').hidden = next !== 'robotics';
   $('actionsAgent').hidden = next !== 'agent';$('actionsKahler').hidden = next !== 'kahler';
   if (next !== 'agent') $('objList').hidden = true;
   else if ($('objToggle').getAttribute('aria-expanded') === 'true')$('objList').hidden = false;
-  history.replaceState(null, '', next === 'agent' ? '#agent' : `#${currentSurface}`);
+  history.replaceState(null, '', next === 'agent' ? '#agent' : next === 'robotics' ? '#robotics' : `#${currentSurface}`);
   return skipRender ? Promise.resolve() : render();
 }
 document.querySelector('.modes').addEventListener('click', (e) => {
   const b = e.target.closest('.mode');
   if (b && b.dataset.mode !== mode) setMode(b.dataset.mode);
 });
+
+
+/* ───────── Robotics: parametric robot generator ───────── */
+const Robo = (() => {
+  const PAL = { orange:[1,.55,.1], teal:[.1,.8,.75], violet:[.62,.4,1], lime:[.5,.9,.2] };
+  const S = { n:3, len:2, taper:.8, grip:true, pal:'orange', yaw:0, ang:[-.5,-1,-1.2], tx:2.5, ty:1.5, tz:1, tgt:true, LIM:2.6 };
+  const f = (v) => (+v).toFixed(4);
+  const mat = (c, e=0) => `<Appearance><Material diffuseColor="${c.map(f).join(' ')}" specularColor=".5 .5 .5" shininess=".5" emissiveColor="${c.map(v=>f(v*e)).join(' ')}"/></Appearance>`;
+  const lens = () => Array.from({length:S.n}, (_,i) => S.len * Math.pow(S.taper, i));
+  const rads = () => Array.from({length:S.n}, (_,i) => .2 * Math.pow(S.taper, i));
+  function x3d() {
+    const c = PAL[S.pal], steel = [.72,.76,.84], dark = [.18,.19,.25], L = lens(), R = rads();
+    while (S.ang.length < S.n) S.ang.push(-.6);
+    let chain = '';
+    for (let i = S.n - 1; i >= 0; i--) {
+      const link = `<Transform translation="0 ${f(L[i]/2)} 0"><Shape><Cylinder radius="${f(R[i]*.75)}" height="${f(L[i])}"/>${mat(steel)}</Shape></Transform>`;
+      const next = i === S.n - 1 ? hand(c, dark, L[i]) : chain;
+      chain = `<Transform DEF="J${i}" translation="0 ${i===0?.6:f(L[i-1])} 0" rotation="0 0 1 ${f(S.ang[i])}"><Shape><Sphere radius="${f(R[i]*1.5)}"/>${mat(c,.15)}</Shape>${link}${next}</Transform>`;
+      if (i > 0) chain = chain; 
+    }
+    const tgt = S.tgt ? `<Transform translation="${f(S.tx)} ${f(S.ty)} ${f(S.tz)}"><Shape><Sphere radius=".14"/><Appearance><Material diffuseColor="1 .3 .3" emissiveColor="1 .2 .2" transparency=".3"/></Appearance></Shape></Transform>` : '';
+    return `<?xml version="1.0" encoding="UTF-8"?><X3D profile="Immersive" version="3.3"><head><meta name="generator" content="X3D Studio Robotics"/></head><Scene>
+<NavigationInfo type='"EXAMINE" "ANY"' headlight="false"/><Background skyColor="0.02 0.02 0.07, 0.1 0.12 0.25" skyAngle="1.5708"/>
+<Viewpoint description="Iso" position="${f(S.len*3.2)} ${f(S.len*2.4)} ${f(S.len*3.8)}" orientation="-0.6 0.78 0.2 -0.75" centerOfRotation="0 ${f(S.len)} 0"/>
+<DirectionalLight direction="-0.4 -1 -0.5"/><DirectionalLight direction="0.8 -0.3 0.6" intensity=".55" color=".7 .8 1"/>
+<Transform translation="0 -.03 0"><Shape><Box size="17 .06 11"/>${mat([.07,.08,.13])}</Shape></Transform>
+<Transform translation="0 .15 0"><Shape><Cylinder radius=".9" height=".3"/>${mat(dark)}</Shape></Transform>
+<Transform DEF="Yaw" translation="0 .3 0" rotation="0 1 0 ${f(S.yaw)}"><Transform translation="0 .15 0"><Shape><Cylinder radius=".5" height=".3"/>${mat(dark)}</Shape></Transform>${chain}</Transform>
+${tgt}</Scene></X3D>`;
+  }
+  function hand(c, dark, l) {
+    if (!S.grip) return '';
+    const fg = (x, a) => `<Transform translation="${x} .3 0" rotation="0 0 1 ${a}"><Transform translation="0 .3 0"><Shape><Box size=".12 .6 .16"/>${mat(c)}</Shape></Transform></Transform>`;
+    return `<Transform translation="0 ${f(l)} 0"><Shape><Box size=".9 .25 .4"/>${mat(dark)}</Shape>${fg(-.31,.49)}${fg(.31,-.49)}</Transform>`;
+  }
+  /* IK: base yaw aims at the target, planar CCD solves the chain in that vertical plane */
+  function solve() {
+    const L = lens(), h = .6 + .3, t = [Math.hypot(S.tx, S.tz), S.ty - h];
+    S.yaw = Math.atan2(-S.tz, S.tx);
+    const a = S.ang.slice(0, S.n);
+    const tip = () => { let A = 0, x = 0, y = 0; const P = [[0,0]];
+      for (let i = 0; i < S.n; i++) { A += a[i]; x += -Math.sin(A) * L[i]; y += Math.cos(A) * L[i]; P.push([x,y]); } return P; };
+    for (let it = 0; it < 80; it++) for (let j = S.n - 1; j >= 0; j--) {
+      const P = tip(), e = P[S.n], o = P[j];
+      const d = Math.atan2(t[1]-o[1], t[0]-o[0]) - Math.atan2(e[1]-o[1], e[0]-o[0]);
+      a[j] = Math.max(-S.LIM, Math.min(S.LIM, a[j] + Math.atan2(Math.sin(d), Math.cos(d))));
+    }
+    S.ang = a;
+    const e = tip()[S.n]; return Math.hypot(e[0]-t[0], e[1]-t[1]);
+  }
+  return { S, x3d, solve, PAL };
+})();
+(() => {
+  const S = Robo.S, ui = $('rbUI'); let timer = 0;
+  const redraw = () => { clearTimeout(timer); timer = setTimeout(() => { if (mode === 'robotics') render(); }, 90); };
+  const sl = (id, name, min, max, step, get, set, rebuild) => {
+    const l = document.createElement('label'); l.innerHTML = `${name}<input type="range" min="${min}" max="${max}" step="${step}"><output></output>`;
+    const i = l.querySelector('input'), o = l.querySelector('output'); i.value = get(); o.textContent = (+get()).toFixed(2);
+    i.oninput = () => { set(+i.value); o.textContent = (+i.value).toFixed(2); redraw(); };
+    l.dataset.id = id; return l;
+  };
+  function build() {
+    ui.innerHTML = '<h2 class="cap">Generate</h2>';
+    const add = (n) => ui.appendChild(n), fresh = (fn) => (v) => { fn(v); build(); redraw(); };
+    add(sl('n','Joints',2,6,1,()=>S.n,fresh((v)=>{ S.n=v; while(S.ang.length<v) S.ang.push(-.6); })));
+    add(sl('len','Link length',.8,3,.1,()=>S.len,(v)=>S.len=v));
+    add(sl('taper','Taper',.5,1,.05,()=>S.taper,(v)=>S.taper=v));
+    const row = document.createElement('label'); row.innerHTML = '<span>Colour</span><select>' + Object.keys(Robo.PAL).map(k=>`<option ${k===S.pal?'selected':''}>${k}</option>`).join('') + '</select><span></span>';
+    row.querySelector('select').onchange = (e) => { S.pal = e.target.value; redraw(); }; add(row);
+    const g = document.createElement('label'); g.innerHTML = '<span>Gripper</span><input type="checkbox"><span></span>'; const gi = g.querySelector('input'); gi.checked = S.grip; gi.onchange = () => { S.grip = gi.checked; redraw(); }; add(g);
+    ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Pose</h2>');
+    add(sl('yaw','Base',-3.14,3.14,.02,()=>S.yaw,(v)=>S.yaw=v));
+    for (let i = 0; i < S.n; i++) add(sl('j'+i,'Joint '+(i+1),-S.LIM,S.LIM,.02,()=>S.ang[i],(v)=>S.ang[i]=v));
+    ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Reach target (IK)</h2>');
+    add(sl('tx','X',-6,6,.1,()=>S.tx,(v)=>S.tx=v)); add(sl('ty','Y',0,8,.1,()=>S.ty,(v)=>S.ty=v)); add(sl('tz','Z',-6,6,.1,()=>S.tz,(v)=>S.tz=v));
+    const b = document.createElement('button'); b.className = 'hbtn'; b.textContent = 'Solve IK → reach target';
+    const msg = document.createElement('div'); msg.style.color = 'var(--muted)';
+    b.onclick = () => { const err = Robo.solve(); msg.textContent = err < .05 ? 'Reached target.' : 'Out of reach — closest pose shown (error ' + err.toFixed(2) + ').'; build(); ui.appendChild(msg); redraw(); };
+    add(b);
+  }
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  $('rbRandom').onclick = () => {
+    S.n = 2 + Math.floor(Math.random() * 5); S.len = +rnd(1.2, 2.4).toFixed(1); S.taper = +rnd(.65, 1).toFixed(2);
+    S.pal = Object.keys(Robo.PAL)[Math.floor(Math.random() * 4)]; S.grip = Math.random() > .2; S.yaw = rnd(-1, 1);
+    S.ang = Array.from({length:S.n}, () => rnd(-1.3, 1.3)); build(); redraw();
+  };
+  $('rbExport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([Robo.x3d()], {type:'model/x3d+xml'})); a.download = 'robot_' + S.n + 'dof.x3d'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
+  build();
+})();
 
 /* ───────── X3D Agent UI ───────── */
 const STORE_CURRENT = 'x3d-studio:current', STORE_SAVES = 'x3d-studio:saves';
@@ -2847,6 +2945,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31a  Robotics mode: parametric robot generator, pose sliders, IK reach target, export .x3d',
   '2026-10-25a  selftest, vocab, misses log and version commands',
   '2026-10-24b  many more verbs (ditch, inflate, scoot...), questions never edit the scene, unknown verbs no longer add objects',
   '2026-10-24a  "next to" fixed, "it" follows the last object, start over, same color as, move to where',
