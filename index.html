@@ -2806,9 +2806,17 @@ const Robo = (() => {
   const S = { n:3, len:2, taper:.8, grip:true, pal:'orange', yaw:0, ang:[-.5,-1,-1.2], tx:2.5, ty:1.5, tz:1, tgt:true, LIM:2.6 };
   const f = (v) => (+v).toFixed(4);
   const mat = (c, e=0) => `<Appearance><Material diffuseColor="${c.map(f).join(' ')}" specularColor=".5 .5 .5" shininess=".5" emissiveColor="${c.map(v=>f(v*e)).join(' ')}"/></Appearance>`;
+  function lookAt(p, t) {
+    const d = [t[0]-p[0], t[1]-p[1], t[2]-p[2]], m = Math.hypot(...d); d.forEach((_, i) => d[i] /= m);
+    const yaw = Math.atan2(-d[0], -d[2]), pit = Math.asin(d[1]);
+    const sy = Math.sin(yaw/2), cy = Math.cos(yaw/2), sx = Math.sin(pit/2), cx = Math.cos(pit/2);
+    const v = [cy*sx, cx*sy, -sy*sx], w = cy*cx, n = Math.hypot(...v) || 1;
+    return { pos: p, ori: [v[0]/n, v[1]/n, v[2]/n, 2*Math.acos(Math.min(1, w))] };
+  }
   const lens = () => Array.from({length:S.n}, (_,i) => S.len * Math.pow(S.taper, i));
   const rads = () => Array.from({length:S.n}, (_,i) => .2 * Math.pow(S.taper, i));
   function x3d() {
+    const cam = lookAt([S.len*3.2, S.len*2.4, S.len*3.8], [0, S.len*.9, 0]);
     const c = PAL[S.pal], steel = [.72,.76,.84], dark = [.18,.19,.25], L = lens(), R = rads();
     while (S.ang.length < S.n) S.ang.push(-.6);
     let chain = '';
@@ -2821,7 +2829,7 @@ const Robo = (() => {
     const tgt = S.tgt ? `<Transform translation="${f(S.tx)} ${f(S.ty)} ${f(S.tz)}"><Shape><Sphere radius=".14"/><Appearance><Material diffuseColor="1 .3 .3" emissiveColor="1 .2 .2" transparency=".3"/></Appearance></Shape></Transform>` : '';
     return `<?xml version="1.0" encoding="UTF-8"?><X3D profile="Immersive" version="3.3"><head><meta name="generator" content="X3D Studio Robotics"/></head><Scene>
 <NavigationInfo type='"EXAMINE" "ANY"' headlight="false"/><Background skyColor="0.02 0.02 0.07, 0.1 0.12 0.25" skyAngle="1.5708"/>
-<Viewpoint description="Iso" position="${f(S.len*3.2)} ${f(S.len*2.4)} ${f(S.len*3.8)}" orientation="-0.6 0.78 0.2 -0.75" centerOfRotation="0 ${f(S.len)} 0"/>
+<Viewpoint description="Iso" position="${cam.pos.map(f).join(' ')}" orientation="${cam.ori.map(f).join(' ')}" centerOfRotation="0 ${f(S.len)} 0"/>
 <DirectionalLight direction="-0.4 -1 -0.5"/><DirectionalLight direction="0.8 -0.3 0.6" intensity=".55" color=".7 .8 1"/>
 <Transform translation="0 -.03 0"><Shape><Box size="17 .06 11"/>${mat([.07,.08,.13])}</Shape></Transform>
 <Transform translation="0 .15 0"><Shape><Cylinder radius=".9" height=".3"/>${mat(dark)}</Shape></Transform>
