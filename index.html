@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31g · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31h · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -2850,6 +2850,30 @@ ${pad}${tgt}</Scene></X3D>`;
     P.push([x - Math.sin(A) * H, y + Math.cos(A) * H]); return P; };
   function grasp() { const e = pts(S.ang)[S.n + 1]; return [e[0] * Math.cos(S.yaw), SH + e[1], -e[0] * Math.sin(S.yaw)]; }
   const ball = () => S.held ? grasp() : [S.tx, S.ty, S.tz];
+  /* Self-collision: the chain is planar, so links are 2-D capsules, joints are balls, the hand is a short capsule.
+     Also solid: the floor and the base pedestal. Adjacent parts share a joint, so only non-adjacent pairs are tested. */
+  const dseg = (p, a, b) => { const vx = b[0]-a[0], vy = b[1]-a[1], w = vx*vx + vy*vy || 1e-9, t = Math.max(0, Math.min(1, ((p[0]-a[0])*vx + (p[1]-a[1])*vy) / w)); return Math.hypot(p[0]-a[0]-t*vx, p[1]-a[1]-t*vy); };
+  const cross = (a, b, c) => (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]);
+  const crosses = (a, b, c, d) => cross(a,b,c) * cross(a,b,d) < 0 && cross(c,d,a) * cross(c,d,b) < 0;
+  const sdist = (a, b, c, d) => crosses(a, b, c, d) ? 0 : Math.min(dseg(a, c, d), dseg(b, c, d), dseg(c, a, b), dseg(d, a, b));
+  function collides(a = S.ang) {
+    const P = pts(a), R = rads(), n = S.n, seg = [];
+    for (let i = 0; i < n; i++) seg.push([P[i], P[i+1], R[i] * .75, R[i] * .6]);
+    if (S.grip) seg.push([P[n], P[n+1], .3, .1]);
+    for (let i = 0; i < seg.length; i++) for (let j = i + 2; j < seg.length; j++)
+      if (sdist(seg[i][0], seg[i][1], seg[j][0], seg[j][1]) < seg[i][2] + seg[j][2] + .04) return true;
+    for (let j = 2; j < n; j++) for (let i = 0; i <= j - 2; i++)
+      if (dseg(P[j], seg[i][0], seg[i][1]) < R[j] * 1.5 + seg[i][2] + .02) return true;
+    if (S.grip) for (let j = 0; j <= n - 2; j++) if (dseg(P[j], seg[n][0], seg[n][1]) < R[j] * 1.5 + .3) return true;
+    for (const [A, B, , r] of seg) for (let k = 0; k <= 4; k++) {
+      const x = A[0] + (B[0]-A[0]) * k / 4, y = SH + A[1] + (B[1]-A[1]) * k / 4;
+      if (y < r) return true;                               // floor
+      if (Math.abs(x) < .5 + r && y < .6 + r) return true;  // base pedestal
+    }
+    for (let k = 1; k < n; k++) if (SH + P[k][1] < R[k] * 1.5 - .03) return true;
+    if (S.held && SH + P[n+1][1] < .18) return true;
+    return false;
+  }
   /* IK: base yaw aims at the target; planar CCD puts the GRASP POINT (between the fingers) on it */
   function solve(x = S.tx, y = S.ty, z = S.tz) {
     const t = [Math.hypot(x, z), y - SH]; S.yaw = Math.atan2(-z, x);
@@ -2857,11 +2881,12 @@ ${pad}${tgt}</Scene></X3D>`;
     for (let it = 0; it < 80; it++) for (let j = S.n - 1; j >= 0; j--) {
       const P = pts(a), e = P[S.n + 1], o = P[j];
       const d = Math.atan2(t[1]-o[1], t[0]-o[0]) - Math.atan2(e[1]-o[1], e[0]-o[0]);
-      a[j] = Math.max(-S.LIM, Math.min(S.LIM, a[j] + Math.atan2(Math.sin(d), Math.cos(d))));
+      const old = a[j]; a[j] = Math.max(-S.LIM, Math.min(S.LIM, a[j] + Math.atan2(Math.sin(d), Math.cos(d))));
+      if (collides(a)) a[j] = old;   // never step into a self-collision
     }
     S.ang = a; const e = pts(a)[S.n + 1]; return Math.hypot(e[0]-t[0], e[1]-t[1]);
   }
-  return { S, x3d, solve, grasp, ball, PAL };
+  return { S, x3d, solve, grasp, ball, collides, PAL };
 })();
 (() => {
   const S = Robo.S, ui = $('rbUI'); let timer = 0;
@@ -2885,7 +2910,7 @@ ${pad}${tgt}</Scene></X3D>`;
   const sl = (id, name, min, max, step, get, set, rebuild) => {
     const l = document.createElement('label'); l.innerHTML = `${name}<input type="range" min="${min}" max="${max}" step="${step}"><output></output>`;
     const i = l.querySelector('input'), o = l.querySelector('output'); i.value = get(); o.textContent = (+get()).toFixed(2);
-    i.oninput = () => { set(+i.value); o.textContent = (+i.value).toFixed(2); LIVE.test(id) ? live() : redraw(); };
+    i.oninput = () => { const old = get(); set(+i.value); if (/^j\d$/.test(id) && Robo.collides(S.ang)) { set(old); i.value = old; MSG.textContent = 'Blocked: the arm would hit itself, the floor, or its base.'; return; } o.textContent = (+i.value).toFixed(2); LIVE.test(id) ? live() : redraw(); };
     l.dataset.id = id; return l;
   };
   const MSG = document.createElement('div'); MSG.style.color = 'var(--muted)';
@@ -2899,6 +2924,7 @@ ${pad}${tgt}</Scene></X3D>`;
   async function move(x, y, z, g, ms, id) {
     const p0 = snap(), err = Robo.solve(x, y, z), p1 = snap(); p1.g = g; p1.y = p0.y + wrap(p1.y - p0.y);
     S.yaw = p0.y; S.ang = p0.a; S.g = p0.g;
+    for (let k = 1; k <= 20; k++) { const q = p0.a.map((v, i) => v + (p1.a[i] - v) * k / 20); if (Robo.collides(q)) { MSG.textContent = 'Blocked: that path would make the arm hit itself or the floor.'; return 98; } }
     const ok = await tween(p0, p1, ms, id); return ok ? err : 99;
   }
   async function pick() {
@@ -2907,7 +2933,7 @@ ${pad}${tgt}</Scene></X3D>`;
     cancelAnimationFrame(anim); anim = 0; const id = ++seq, [x, y, z] = [S.tx, S.ty, S.tz];
     MSG.textContent = 'Approaching…';
     let e = await move(x, y + 1.1, z, 0, 900, id); if (e === 99) return;
-    if (e > .1) { MSG.textContent = 'Ball is out of reach. Move X/Y/Z closer or add a joint.'; return; }
+    if (e > .1) { if (e !== 98) MSG.textContent = 'Ball is out of reach or blocked. Move X/Y/Z closer or add a joint.'; return; }
     if ((e = await move(x, y, z, 0, 700, id)) === 99) return;
     if ((e = await move(x, y, z, 1, 450, id)) === 99) return;
     S.held = true; MSG.textContent = 'Gripped. Lifting…';
@@ -2919,7 +2945,7 @@ ${pad}${tgt}</Scene></X3D>`;
     cancelAnimationFrame(anim); anim = 0; const id = ++seq, [x, y, z] = [S.dx, .24, S.dz];
     MSG.textContent = 'Carrying to the drop zone…';
     let e = await move(x, y + 1.3, z, 1, 900, id); if (e === 99) return;
-    if (e > .1) { MSG.textContent = 'The drop zone is out of reach. Move it closer to the arm.'; return; }
+    if (e > .1) { if (e !== 98) MSG.textContent = 'The drop zone is out of reach or blocked. Move it closer to the arm.'; return; }
     if ((e = await move(x, y, z, 1, 700, id)) === 99) return;
     const g = Robo.grasp(); S.held = false; [S.tx, S.ty, S.tz] = g; live();
     if ((e = await move(x, y, z, 0, 450, id)) === 99) return;
@@ -2981,7 +3007,7 @@ ${pad}${tgt}</Scene></X3D>`;
     if ((m = t.match(new RegExp('ball\\s*(?:to|at)\\s*' + N + sep + N + '(?:' + sep + N + ')?'))) && !S.held) { S.tx = +m[1]; if (m[3] !== undefined) { S.ty = Math.max(.2, +m[2]); S.tz = +m[3]; } else { S.ty = .2; S.tz = +m[2]; } did.push('ball moved'); }
     if ((m = t.match(new RegExp('(?:pad|zone)\\s*(?:to|at)\\s*' + N + sep + N)))) { S.dx = +m[1]; S.dz = +m[2]; did.push('drop zone moved'); }
     if (/\b(random|surprise me)\b/.test(t) || (!shape && /\bgenerate\b/.test(t))) { $('rbRandom').click(); did.push('random robot'); }
-    else if (shape) { seq++; S.held = false; S.g = 0; build(); clearTimeout(timer); await render(); }
+    else if (shape) { seq++; S.held = false; S.g = 0; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); build(); clearTimeout(timer); await render(); }
     else if (did.length) { build(); live(); }
     const ui$ = (q) => ui.querySelector(q);
     if (/\bstop\b/.test(t)) { seq++; const mo = ui$('.mot'); if (mo && mo.checked) { mo.checked = false; mo.onchange(); } did.push('stopped'); }
@@ -3013,7 +3039,7 @@ ${pad}${tgt}</Scene></X3D>`;
     const mt = document.createElement('label'); mt.innerHTML = '<span>Motion</span><input type="checkbox"><span></span>'; const mi = mt.querySelector('input'); mi.checked = !!anim; mi.className = 'mot';
     mi.onchange = () => { if (mi.checked) { const b0 = S.ang.slice(), y0 = S.yaw, t0 = performance.now();
         const step = (t) => { const k = (t - t0) / 1000; S.yaw = y0 + .7 * Math.sin(k * .6);
-          S.ang = b0.map((a, i) => Math.max(-S.LIM, Math.min(S.LIM, a + .55 * Math.sin(k * 1.3 + i * .9)))); live(); anim = requestAnimationFrame(step); };
+          const cand = b0.map((a, i) => Math.max(-S.LIM, Math.min(S.LIM, a + .55 * Math.sin(k * 1.3 + i * .9)))); if (!Robo.collides(cand)) S.ang = cand; live(); anim = requestAnimationFrame(step); };
         anim = requestAnimationFrame(step); } else { cancelAnimationFrame(anim); anim = 0; build(); } };
     add(mt);
     add(sl('yaw','Base',-3.14,3.14,.02,()=>S.yaw,(v)=>S.yaw=v));
@@ -3036,7 +3062,7 @@ ${pad}${tgt}</Scene></X3D>`;
   $('rbRandom').onclick = () => {
     S.n = 2 + Math.floor(Math.random() * 5); S.len = +rnd(1.2, 2.4).toFixed(1); S.taper = +rnd(.65, 1).toFixed(2);
     S.pal = Object.keys(Robo.PAL)[Math.floor(Math.random() * 4)]; S.grip = Math.random() > .2; S.yaw = rnd(-1, 1);
-    S.ang = Array.from({length:S.n}, () => rnd(-1.3, 1.3)); seq++; S.held = false; S.g = 0; S.tx = 2.4; S.ty = .2; S.tz = 1.2; S.dx = -2.4; S.dz = 1.2; build(); redraw();
+    for (let t = 0; t < 40; t++) { S.ang = Array.from({length:S.n}, () => rnd(-1.3, 1.3)); if (!Robo.collides(S.ang)) break; } if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); seq++; S.held = false; S.g = 0; S.tx = 2.4; S.ty = .2; S.tz = 1.2; S.dx = -2.4; S.dz = 1.2; build(); redraw();
   };
   $('rbExport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([Robo.x3d()], {type:'model/x3d+xml'})); a.download = 'robot_' + S.n + 'dof.x3d'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
   build();
@@ -3099,6 +3125,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31h  Robotics: self-collision (links, joints, hand, floor, base) blocks sliders, motion, IK and planned paths',
   '2026-10-31g  Robotics: vocab is a grouped, tappable display built from the same list the parser uses',
   '2026-10-31f  Robotics: prompt chips, help/vocab/misses, typo repair, closest-command suggestions',
   '2026-10-31e  Robotics: prompt box (joints, colour, gripper, size, ball/pad moves, pick, place, wave, random)',
