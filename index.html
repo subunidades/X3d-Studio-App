@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31p · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31q · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -3003,7 +3003,7 @@ ${pad}${tgt}</Scene></X3D>`;
   const chipBox = document.createElement('div');
   CH.forEach(([title, items]) => { const g = document.createElement('div'); g.className = 'chip-group'; g.innerHTML = '<h2 class="cap">' + title + '</h2>';
     const row = document.createElement('div'); row.className = 'chips';
-    items.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => fill(c); row.appendChild(b); });
+    items.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => tap(c); row.appendChild(b); });
     g.appendChild(row); chipBox.appendChild(g); });
   const HELP = 'Build: "5-joint teal arm", "long slim arm", "short tapered arm", "no gripper", "random"\nColours: orange · teal · violet · lime\nMove: "ball to 3 1" (x z) · "ball to 3 0.5 1" (x y z) · "pad to -2 1"\nDo: "pick up the ball" · "place it" · "pick up the ball and place it" · "reach" · "wave" · "stop"\nCombine: "5-joint violet arm then pick up the ball"\nOther: help · vocab · misses · or just tap a chip below.';
   const VOCAB = [
@@ -3033,17 +3033,18 @@ ${pad}${tgt}</Scene></X3D>`;
   const applyDraft = () => { if (!pending) return false; Object.assign(S, { n: D.n, len: D.len, taper: D.taper, pal: D.pal, grip: D.grip });
     while (S.ang.length < S.n) S.ang.push(-.6); S.held = false; S.g = 0; seq++; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); pending = false; return true; };
   const stage = () => { pending = true; FEED().textContent = 'Changes waiting. Press Go to build them.'; };
+  const tap = (c) => (CH[0][1].includes(c) ? fill(c) : run(c, false));   // 'Build the robot' pills wait for Go; the rest act immediately
   const fill = (c) => { const i = PROMPT.querySelector('#rbText'); i.value = c; FEED().textContent = 'Press Go to run: “' + c + '”'; try { i.focus(); } catch (e) {} };
   let working = 0;
   const FEED = () => PROMPT.querySelector('#rbFeed');
   new MutationObserver(() => { if (working > 0 && MSG.textContent) FEED().textContent = 'Working… ' + MSG.textContent; }).observe(MSG, { childList: true, characterData: true, subtree: true });
-  async function run(cmd) {
+  async function run(cmd, isGo = cmd === undefined) {
     const feed = FEED(), shown = (cmd !== undefined ? cmd : PROMPT.querySelector('#rbText').value).trim();
     if (!shown && !pending) { feed.textContent = 'Type a command first, or tap a chip to fill the box. Then press Go.'; return; }
     working++; feed.textContent = 'Working on “' + shown + '”…';
-    try { await runInner(cmd); } catch (e) { feed.textContent = 'Something went wrong: ' + (e && e.message ? e.message : e); console.error(e); } finally { working--; }
+    try { await runInner(cmd, isGo); } catch (e) { feed.textContent = 'Something went wrong: ' + (e && e.message ? e.message : e); console.error(e); } finally { working--; }
   }
-  async function runInner(cmd) {
+  async function runInner(cmd, isGo) {
     const inp = PROMPT.querySelector('#rbText'), feed = PROMPT.querySelector('#rbFeed'), t0 = (cmd !== undefined ? cmd : inp.value).toLowerCase().trim();
     if (!t0 && pending) { applyDraft(); syncDraft(); build(); clearTimeout(timer); await render(); feed.textContent = 'Built: ' + S.n + ' joints, ' + S.pal + (S.grip ? ', gripper.' : ', no gripper.'); return; }
     if (!t0) return; feed.textContent = '';
@@ -3057,7 +3058,7 @@ ${pad}${tgt}</Scene></X3D>`;
       const note = document.createElement('div'); note.style.marginTop = '8px'; note.textContent = 'Numbers also work: "5-joint", "ball to 3 1", "pad to -2 1". Small typos are fixed automatically.'; feed.appendChild(note); return; }
     if (/^misses$/.test(t0)) { feed.textContent = MISSES.length ? 'Phrases I did not understand:\n' + MISSES.slice(-10).join('\n') : 'No misses yet.'; return; }
     const t = norm(repair(t0)), did = []; let shape = false, heldNote = false, m;
-    if (applyDraft()) { shape = true; did.push('applied your shape changes'); }
+    if (isGo && applyDraft()) { shape = true; did.push('applied your shape changes'); }
     if ((m = t.match(/\b(\d|one|two|three|four|five|six)[- ]?(?:joint|dof|axis|axes|link|segment)s?\b/))) { S.n = Math.max(2, Math.min(6, W[m[1]] || +m[1])); while (S.ang.length < S.n) S.ang.push(-.6); did.push(S.n + ' joints'); shape = true; }
     for (const k in COL) if (new RegExp('\\b' + k + '\\b(?! (?:pad|zone))').test(t)) { S.pal = COL[k]; did.push(COL[k]); shape = true; break; }
     if (/\b(?:no|without)\s+(?:a\s+)?(?:gripper|claw)\b/.test(t)) { S.grip = false; did.push('no gripper'); shape = true; }
@@ -3074,9 +3075,9 @@ ${pad}${tgt}</Scene></X3D>`;
     if (/\b(random|surprise me)\b/.test(t)) { await generate(false); did.push('random robot'); }
     else if (shape || wantsNew) {
       if (wantsNew) { Object.assign(S, { n: 3, len: 2, taper: .8, grip: true, pal: 'orange', yaw: 0, ang: [-.5, -1, -1.2] }); did.push('new armature (3 joints, orange; say more to change it)'); }
-      seq++; S.held = false; S.g = 0; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); syncDraft(); build(); clearTimeout(timer); await render();
+      seq++; S.held = false; S.g = 0; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); if (isGo) syncDraft(); build(); clearTimeout(timer); await render();
     }
-    else if (did.length) { syncDraft(); build(); live(); }
+    else if (did.length) { if (isGo) syncDraft(); build(); live(); }
     await settle();
     const ui$ = (q) => ui.querySelector(q), acts = [];
     const find = (re, name) => { for (const x of t.matchAll(re)) acts.push([x.index, name]); };
@@ -3099,7 +3100,7 @@ ${pad}${tgt}</Scene></X3D>`;
     const words = new Set(t.split(/\W+/)), top = CH.flatMap(([, it]) => it).map((c) => [c.split(/\W+/).filter((w) => words.has(w)).length, c]).sort((a, b) => b[0] - a[0]).slice(0, 3).map((x) => x[1]);
     feed.textContent = 'I didn\'t understand "' + t0 + '". Closest commands (tap one), or type "help":';
     const row = document.createElement('div'); row.className = 'chips'; row.style.marginTop = '6px';
-    top.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => fill(c); row.appendChild(b); }); feed.appendChild(row);
+    top.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => tap(c); row.appendChild(b); }); feed.appendChild(row);
   }
   PROMPT.querySelector('#rbChips').appendChild(chipBox);
   const goBtn = PROMPT.querySelector('#rbGo'); let lastGo = 0;
@@ -3219,6 +3220,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31q  Robotics: pills work again; only pills that build a robot wait for Go, help/vocab/move/pick/place/wave/stop run on tap',
   '2026-10-31p  Robotics: ONLY the Go button builds or renders; chips, Generate, Enter and the Agent console just fill the box; shape sliders stage until Go',
   '2026-10-31o  Robotics: "Read as" line no longer repeats reach',
   '2026-10-31n  Robotics: Go follows the sentence (picks/picking, positions, solve IK, target understood); only the word random makes a random robot; no automatic demo',
