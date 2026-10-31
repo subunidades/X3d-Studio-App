@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31f · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31g · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -2940,7 +2940,15 @@ ${pad}${tgt}</Scene></X3D>`;
     items.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => run(c); row.appendChild(b); });
     g.appendChild(row); chipBox.appendChild(g); });
   const HELP = 'Build: "5-joint teal arm", "long slim arm", "short tapered arm", "no gripper", "random"\nColours: orange · teal · violet · lime\nMove: "ball to 3 1" (x z) · "ball to 3 0.5 1" (x y z) · "pad to -2 1"\nDo: "pick up the ball" · "place it" · "pick up the ball and place it" · "reach" · "wave" · "stop"\nCombine: "5-joint violet arm then pick up the ball"\nOther: help · vocab · misses · or just tap a chip below.';
-  const KNOWN = 'joint joints dof link links segment arm robot teal cyan aqua orange violet purple lime green gripper claw long longer tall big short shorter small compact slim uniform tapered taper ball pad zone pick grab grasp take place put drop deliver reach wave dance animate stop random surprise generate help vocab misses one two three four five six with then and the from into onto down that this please thanks would could want make build give show have like very just you can now its too for are not set get let use see add all any new red blue gold pink'.split(' ');
+  const VOCAB = [
+    ['Build', 'joint joints dof link segment arm robot long longer tall big short shorter small compact slim uniform tapered gripper claw no\u00a0gripper'],
+    ['Colours', 'orange teal cyan aqua violet purple lime green'],
+    ['Numbers', 'one two three four five six (2 to 6 joints)'],
+    ['Move', 'ball\u00a0to pad\u00a0to zone'],
+    ['Do', 'pick grab grasp take place put drop deliver reach wave dance animate stop'],
+    ['Other', 'random surprise generate help vocab misses'] ];
+  const FILLER = 'with then and the from into onto down that this please thanks would could want make build give show have like very just you can now its too for are not set get let use see add all any new red blue gold pink';
+  const KNOWN = [...new Set((VOCAB.map((g) => g[1]).join(' ').replace(/\([^)]*\)/g, '') + ' ' + FILLER).toLowerCase().replace(/\u00a0/g, ' ').split(/\s+/).filter(Boolean))];
   const lev = (a, b) => { const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]); for (let j = 1; j <= b.length; j++) d[0][j] = j;
     for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1)); return d[a.length][b.length]; };
   const repair = (t) => t.replace(/[a-z]{3,}/g, (w) => { if (KNOWN.includes(w)) return w; let best = w, bd = 9;
@@ -2952,7 +2960,13 @@ ${pad}${tgt}</Scene></X3D>`;
     const inp = PROMPT.querySelector('#rbText'), feed = PROMPT.querySelector('#rbFeed'), t0 = (cmd !== undefined ? cmd : inp.value).toLowerCase().trim();
     if (!t0) return; feed.textContent = '';
     if (/^(help|\?|commands|examples?|what can (?:you|i) (?:do|say))$/.test(t0)) { feed.textContent = HELP; return; }
-    if (/^(vocab|vocabulary|words)$/.test(t0)) { feed.textContent = 'Words I know:\n' + KNOWN.slice(0, 66).join(' · '); return; }
+    if (/^(vocab|vocabulary|words|what words do you (?:know|understand))$/.test(t0)) {
+      feed.textContent = 'Everything I understand. Tap a word to add it to the box:';
+      VOCAB.forEach(([title, words]) => { const h = document.createElement('div'); h.textContent = title; h.style.cssText = 'margin-top:8px;font-weight:600;color:var(--text)'; feed.appendChild(h);
+        const row = document.createElement('div'); row.className = 'chips'; row.style.marginTop = '4px';
+        words.split(/\s+/).forEach((w) => { if (w[0] === '(') return; const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = w.replace(/\u00a0/g, ' ');
+          b.onclick = () => { inp.value += (inp.value ? ' ' : '') + b.textContent; }; row.appendChild(b); }); feed.appendChild(row); });
+      const note = document.createElement('div'); note.style.marginTop = '8px'; note.textContent = 'Numbers also work: "5-joint", "ball to 3 1", "pad to -2 1". Small typos are fixed automatically.'; feed.appendChild(note); return; }
     if (/^misses$/.test(t0)) { feed.textContent = MISSES.length ? 'Phrases I did not understand:\n' + MISSES.slice(-10).join('\n') : 'No misses yet.'; return; }
     const t = repair(t0), did = []; let shape = false, m;
     if ((m = t.match(/\b(\d|one|two|three|four|five|six)[- ]?(?:joint|dof|axis|axes|link|segment)s?\b/))) { S.n = Math.max(2, Math.min(6, W[m[1]] || +m[1])); while (S.ang.length < S.n) S.ang.push(-.6); did.push(S.n + ' joints'); shape = true; }
@@ -3085,6 +3099,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31g  Robotics: vocab is a grouped, tappable display built from the same list the parser uses',
   '2026-10-31f  Robotics: prompt chips, help/vocab/misses, typo repair, closest-command suggestions',
   '2026-10-31e  Robotics: prompt box (joints, colour, gripper, size, ball/pad moves, pick, place, wave, random)',
   '2026-10-31d  Robotics: visible green drop zone with its own sliders; Place puts the ball on it',
