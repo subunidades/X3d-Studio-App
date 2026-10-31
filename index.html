@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31n · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31p · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -2931,14 +2931,14 @@ ${pad}${tgt}</Scene></X3D>`;
         if (S.grip) { const fx = .38 - .12 * S.g, fa = .35 * (1 - S.g), L = sc.getNamedNode('FL'), Rr = sc.getNamedNode('FR');
           L.translation = new X3D.SFVec3f(-fx, .3, 0); L.rotation = R(fa); Rr.translation = new X3D.SFVec3f(fx, .3, 0); Rr.rotation = R(-fa); }
       } while (want);
-    } catch (e) { redraw(); }   // scene not ready or node missing: fall back to a reload
+    } catch (e) { /* scene not loaded yet: do nothing; only Go (or switching tabs) renders */ }
     busy = false;
   }
   const redraw = () => { clearTimeout(timer); timer = setTimeout(() => { if (mode === 'robotics') render(); }, 90); };
   const sl = (id, name, min, max, step, get, set, rebuild) => {
     const l = document.createElement('label'); l.innerHTML = `${name}<input type="range" min="${min}" max="${max}" step="${step}"><output></output>`;
     const i = l.querySelector('input'), o = l.querySelector('output'); i.value = get(); o.textContent = (+get()).toFixed(2);
-    i.oninput = () => { const old = get(); set(+i.value); if (/^j\d$/.test(id) && Robo.collides(S.ang)) { set(old); i.value = old; MSG.textContent = 'Blocked: the arm would hit itself, the floor, or its base.'; return; } o.textContent = (+i.value).toFixed(2); LIVE.test(id) ? live() : redraw(); };
+    i.oninput = () => { const old = get(); set(+i.value); if (/^j\d$/.test(id) && Robo.collides(S.ang)) { set(old); i.value = old; MSG.textContent = 'Blocked: the arm would hit itself, the floor, or its base.'; return; } o.textContent = (+i.value).toFixed(2); LIVE.test(id) ? live() : stage(); };
     l.dataset.id = id; return l;
   };
   const MSG = document.createElement('div'); MSG.style.color = 'var(--muted)';
@@ -2994,7 +2994,7 @@ ${pad}${tgt}</Scene></X3D>`;
   }
   /* ── Prompt box: plain phrase matching, no network ── */
   const PROMPT = document.createElement('div');
-  PROMPT.innerHTML = '<h2 class="cap">Describe it — or tap a chip</h2><div style="display:flex;gap:6px"><input id="rbText" type="text" enterkeyhint="go" autocomplete="off" autocapitalize="off" placeholder="5-joint teal arm, then pick up the ball" style="flex:1;min-width:0;font-size:16px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)"><button type="button" class="hbtn" id="rbGo">Go</button></div><div id="rbFeed" style="color:var(--muted);margin-top:4px;white-space:pre-wrap"></div><div id="rbChips" style="margin-top:8px"></div>';
+  PROMPT.innerHTML = '<h2 class="cap">Describe it, then press Go</h2><div style="display:flex;gap:6px"><input id="rbText" type="text" enterkeyhint="done" autocomplete="off" autocapitalize="off" placeholder="5-joint teal arm, then pick up the ball" style="flex:1;min-width:0;font-size:16px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)"><button type="button" class="hbtn" id="rbGo">Go</button></div><div id="rbFeed" style="color:var(--muted);margin-top:4px;white-space:pre-wrap"></div><div id="rbChips" style="margin-top:8px"></div>';
   const CH = [
     ['Build the robot', ['3-joint orange arm', '5-joint teal arm', '6-joint violet arm', 'long slim arm', 'short tapered arm', 'no gripper', 'gripper', 'random']],
     ['Move things', ['ball to 3 1', 'ball to -2 2', 'ball to 1.5 3', 'pad to -3 1', 'pad to 2 -2']],
@@ -3003,7 +3003,7 @@ ${pad}${tgt}</Scene></X3D>`;
   const chipBox = document.createElement('div');
   CH.forEach(([title, items]) => { const g = document.createElement('div'); g.className = 'chip-group'; g.innerHTML = '<h2 class="cap">' + title + '</h2>';
     const row = document.createElement('div'); row.className = 'chips';
-    items.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => run(c); row.appendChild(b); });
+    items.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => fill(c); row.appendChild(b); });
     g.appendChild(row); chipBox.appendChild(g); });
   const HELP = 'Build: "5-joint teal arm", "long slim arm", "short tapered arm", "no gripper", "random"\nColours: orange · teal · violet · lime\nMove: "ball to 3 1" (x z) · "ball to 3 0.5 1" (x y z) · "pad to -2 1"\nDo: "pick up the ball" · "place it" · "pick up the ball and place it" · "reach" · "wave" · "stop"\nCombine: "5-joint violet arm then pick up the ball"\nOther: help · vocab · misses · or just tap a chip below.';
   const VOCAB = [
@@ -3027,17 +3027,25 @@ ${pad}${tgt}</Scene></X3D>`;
     .replace(/\breach(?:[ ,]+reach)+\b/g, 'reach');
   const MISSES = [];
   const W = { one:1, two:2, three:3, four:4, five:5, six:6 }, COL = { orange:'orange', teal:'teal', cyan:'teal', aqua:'teal', violet:'violet', purple:'violet', lime:'lime', green:'lime' };
+  /* Nothing here renders or builds on its own. Shape controls edit a DRAFT; chips/Generate/Agent only fill the box; the Go button applies. */
+  const D = { n: S.n, len: S.len, taper: S.taper, pal: S.pal, grip: S.grip }; let pending = false;
+  const syncDraft = () => { Object.assign(D, { n: S.n, len: S.len, taper: S.taper, pal: S.pal, grip: S.grip }); pending = false; };
+  const applyDraft = () => { if (!pending) return false; Object.assign(S, { n: D.n, len: D.len, taper: D.taper, pal: D.pal, grip: D.grip });
+    while (S.ang.length < S.n) S.ang.push(-.6); S.held = false; S.g = 0; seq++; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); pending = false; return true; };
+  const stage = () => { pending = true; FEED().textContent = 'Changes waiting. Press Go to build them.'; };
+  const fill = (c) => { const i = PROMPT.querySelector('#rbText'); i.value = c; FEED().textContent = 'Press Go to run: “' + c + '”'; try { i.focus(); } catch (e) {} };
   let working = 0;
   const FEED = () => PROMPT.querySelector('#rbFeed');
   new MutationObserver(() => { if (working > 0 && MSG.textContent) FEED().textContent = 'Working… ' + MSG.textContent; }).observe(MSG, { childList: true, characterData: true, subtree: true });
   async function run(cmd) {
     const feed = FEED(), shown = (cmd !== undefined ? cmd : PROMPT.querySelector('#rbText').value).trim();
-    if (!shown) { feed.textContent = 'Type a command first, or tap a chip below.'; return; }
+    if (!shown && !pending) { feed.textContent = 'Type a command first, or tap a chip to fill the box. Then press Go.'; return; }
     working++; feed.textContent = 'Working on “' + shown + '”…';
     try { await runInner(cmd); } catch (e) { feed.textContent = 'Something went wrong: ' + (e && e.message ? e.message : e); console.error(e); } finally { working--; }
   }
   async function runInner(cmd) {
     const inp = PROMPT.querySelector('#rbText'), feed = PROMPT.querySelector('#rbFeed'), t0 = (cmd !== undefined ? cmd : inp.value).toLowerCase().trim();
+    if (!t0 && pending) { applyDraft(); syncDraft(); build(); clearTimeout(timer); await render(); feed.textContent = 'Built: ' + S.n + ' joints, ' + S.pal + (S.grip ? ', gripper.' : ', no gripper.'); return; }
     if (!t0) return; feed.textContent = '';
     if (/^(help|\?|commands|examples?|what can (?:you|i) (?:do|say))$/.test(t0)) { feed.textContent = HELP; return; }
     if (/^(vocab|vocabulary|words|what words do you (?:know|understand))$/.test(t0)) {
@@ -3049,6 +3057,7 @@ ${pad}${tgt}</Scene></X3D>`;
       const note = document.createElement('div'); note.style.marginTop = '8px'; note.textContent = 'Numbers also work: "5-joint", "ball to 3 1", "pad to -2 1". Small typos are fixed automatically.'; feed.appendChild(note); return; }
     if (/^misses$/.test(t0)) { feed.textContent = MISSES.length ? 'Phrases I did not understand:\n' + MISSES.slice(-10).join('\n') : 'No misses yet.'; return; }
     const t = norm(repair(t0)), did = []; let shape = false, heldNote = false, m;
+    if (applyDraft()) { shape = true; did.push('applied your shape changes'); }
     if ((m = t.match(/\b(\d|one|two|three|four|five|six)[- ]?(?:joint|dof|axis|axes|link|segment)s?\b/))) { S.n = Math.max(2, Math.min(6, W[m[1]] || +m[1])); while (S.ang.length < S.n) S.ang.push(-.6); did.push(S.n + ' joints'); shape = true; }
     for (const k in COL) if (new RegExp('\\b' + k + '\\b(?! (?:pad|zone))').test(t)) { S.pal = COL[k]; did.push(COL[k]); shape = true; break; }
     if (/\b(?:no|without)\s+(?:a\s+)?(?:gripper|claw)\b/.test(t)) { S.grip = false; did.push('no gripper'); shape = true; }
@@ -3065,9 +3074,9 @@ ${pad}${tgt}</Scene></X3D>`;
     if (/\b(random|surprise me)\b/.test(t)) { await generate(false); did.push('random robot'); }
     else if (shape || wantsNew) {
       if (wantsNew) { Object.assign(S, { n: 3, len: 2, taper: .8, grip: true, pal: 'orange', yaw: 0, ang: [-.5, -1, -1.2] }); did.push('new armature (3 joints, orange; say more to change it)'); }
-      seq++; S.held = false; S.g = 0; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); build(); clearTimeout(timer); await render();
+      seq++; S.held = false; S.g = 0; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); syncDraft(); build(); clearTimeout(timer); await render();
     }
-    else if (did.length) { build(); live(); }
+    else if (did.length) { syncDraft(); build(); live(); }
     await settle();
     const ui$ = (q) => ui.querySelector(q), acts = [];
     const find = (re, name) => { for (const x of t.matchAll(re)) acts.push([x.index, name]); };
@@ -3090,7 +3099,7 @@ ${pad}${tgt}</Scene></X3D>`;
     const words = new Set(t.split(/\W+/)), top = CH.flatMap(([, it]) => it).map((c) => [c.split(/\W+/).filter((w) => words.has(w)).length, c]).sort((a, b) => b[0] - a[0]).slice(0, 3).map((x) => x[1]);
     feed.textContent = 'I didn\'t understand "' + t0 + '". Closest commands (tap one), or type "help":';
     const row = document.createElement('div'); row.className = 'chips'; row.style.marginTop = '6px';
-    top.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => run(c); row.appendChild(b); }); feed.appendChild(row);
+    top.forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => fill(c); row.appendChild(b); }); feed.appendChild(row);
   }
   PROMPT.querySelector('#rbChips').appendChild(chipBox);
   const goBtn = PROMPT.querySelector('#rbGo'); let lastGo = 0;
@@ -3098,17 +3107,17 @@ ${pad}${tgt}</Scene></X3D>`;
   goBtn.addEventListener('mousedown', (e) => e.preventDefault());          // keep the keyboard up so the layout doesn't jump under your finger
   goBtn.addEventListener('pointerup', (e) => { if (e.pointerType === 'touch' || e.pointerType === 'pen') go(); });
   goBtn.addEventListener('click', go);
-  window.RoboPrompt = run;
-  PROMPT.querySelector('#rbText').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+  window.RoboFill = fill;
+  PROMPT.querySelector('#rbText').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); FEED().textContent = 'Press the Go button to run.'; } });
   function build() {
-    ui.innerHTML = ''; ui.appendChild(PROMPT); ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Generate</h2>');
-    const add = (n) => ui.appendChild(n), fresh = (fn) => (v) => { fn(v); build(); redraw(); };
-    add(sl('n','Joints',2,6,1,()=>S.n,fresh((v)=>{ S.n=v; while(S.ang.length<v) S.ang.push(-.6); })));
-    add(sl('len','Link length',.8,3,.1,()=>S.len,(v)=>S.len=v));
-    add(sl('taper','Taper',.5,1,.05,()=>S.taper,(v)=>S.taper=v));
-    const row = document.createElement('label'); row.innerHTML = '<span>Colour</span><select>' + Object.keys(Robo.PAL).map(k=>`<option ${k===S.pal?'selected':''}>${k}</option>`).join('') + '</select><span></span>';
-    row.querySelector('select').onchange = (e) => { S.pal = e.target.value; redraw(); }; add(row);
-    const g = document.createElement('label'); g.innerHTML = '<span>Gripper</span><input type="checkbox"><span></span>'; const gi = g.querySelector('input'); gi.checked = S.grip; gi.onchange = () => { S.grip = gi.checked; redraw(); }; add(g);
+    ui.innerHTML = ''; ui.appendChild(PROMPT); ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Shape (press Go to build)</h2>');
+    const add = (n) => ui.appendChild(n);
+    add(sl('n','Joints',2,6,1,()=>D.n,(v)=>D.n=v));
+    add(sl('len','Link length',.8,3,.1,()=>D.len,(v)=>D.len=v));
+    add(sl('taper','Taper',.5,1,.05,()=>D.taper,(v)=>D.taper=v));
+    const row = document.createElement('label'); row.innerHTML = '<span>Colour</span><select>' + Object.keys(Robo.PAL).map(k=>`<option ${k===D.pal?'selected':''}>${k}</option>`).join('') + '</select><span></span>';
+    row.querySelector('select').onchange = (e) => { D.pal = e.target.value; stage(); }; add(row);
+    const g = document.createElement('label'); g.innerHTML = '<span>Gripper</span><input type="checkbox"><span></span>'; const gi = g.querySelector('input'); gi.checked = D.grip; gi.onchange = () => { D.grip = gi.checked; stage(); }; add(g);
     ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Pose</h2>');
     const mt = document.createElement('label'); mt.innerHTML = '<span>Motion</span><input type="checkbox"><span></span>'; const mi = mt.querySelector('input'); mi.checked = !!anim; mi.className = 'mot';
     mi.onchange = () => { if (mi.checked) { const b0 = S.ang.slice(), y0 = S.yaw, t0 = performance.now();
@@ -3139,7 +3148,7 @@ ${pad}${tgt}</Scene></X3D>`;
   }
   async function generateInner(runTask) {
     const feed = PROMPT.querySelector('#rbFeed'); seq++; cancelAnimationFrame(anim); anim = 0; cancelAnimationFrame(tw);
-    Robo.randomize(); build(); clearTimeout(timer); await render(); await settle();
+    Robo.randomize(); syncDraft(); build(); clearTimeout(timer); await render(); await settle();
     const head = 'New ' + S.n + '-joint ' + S.pal + ' robot. ';
     if (!runTask) { feed.textContent = head; return true; }
     feed.textContent = head + 'Solving IK and picking up the ball…';
@@ -3148,7 +3157,7 @@ ${pad}${tgt}</Scene></X3D>`;
     if (!(await place())) { feed.textContent = head + 'Stopped at place: ' + MSG.textContent; return false; }
     feed.textContent = head + 'Done: picked up the ball and placed it on the pad.'; return true;
   }
-  $('rbRandom').onclick = () => generate(true);
+  $('rbRandom').onclick = () => fill('random armature, solve IK, pick up the ball and place it on the target');
   $('rbExport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([Robo.x3d()], {type:'model/x3d+xml'})); a.download = 'robot_' + S.n + 'dof.x3d'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
   build();
 })();
@@ -3210,6 +3219,8 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31p  Robotics: ONLY the Go button builds or renders; chips, Generate, Enter and the Agent console just fill the box; shape sliders stage until Go',
+  '2026-10-31o  Robotics: "Read as" line no longer repeats reach',
   '2026-10-31n  Robotics: Go follows the sentence (picks/picking, positions, solve IK, target understood); only the word random makes a random robot; no automatic demo',
   '2026-10-31m  Robotics: clear message when the ball is held and you ask to move it',
   '2026-10-31l  Robotics: Go button gives instant feedback, shows live progress and errors, and is reliable on iPad touch',
@@ -3266,9 +3277,9 @@ async function run(override) {
   try {
     const meta = metaCommand(text);
     if (meta) { addLog('info', meta.label, meta.message); return; }
-    if (ROBO_RE.test(text) && window.RoboPrompt) {            // armature / robot talk belongs to the Robotics mode
-      addLog('info', 'Robotics', 'Switching to the Robotics tab to build that.');
-      setMode('robotics'); await window.RoboPrompt(text); return;
+    if (ROBO_RE.test(text) && window.RoboFill) {              // armature / robot talk belongs to the Robotics mode
+      addLog('info', 'Robotics', 'That is a Robotics request. I moved your sentence to the Robotics tab. Press Go there to build it.');
+      setMode('robotics'); window.RoboFill(text); return;
     }
     let r = Agent.runCommand(scene, text);
     if (r.status === 'pending') r = await loadArchive(r.archiveKey);
