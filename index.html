@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31m · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31n · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -3010,8 +3010,8 @@ ${pad}${tgt}</Scene></X3D>`;
     ['Build', 'armature manipulator joint joints dof link segment arm robot long longer tall big short shorter small compact slim uniform tapered gripper claw no\u00a0gripper'],
     ['Colours', 'orange teal cyan aqua violet purple lime green'],
     ['Numbers', 'one two three four five six (2 to 6 joints)'],
-    ['Move', 'ball\u00a0to pad\u00a0to zone'],
-    ['Do', 'pick grab grasp take place put drop deliver reach wave dance animate stop'],
+    ['Move', 'ball\u00a0to pad\u00a0to zone target'],
+    ['Do', 'pick grab grasp take place put drop deliver position reach solve ik wave dance animate stop'],
     ['Other', 'random surprise generate create help vocab misses'] ];
   const FILLER = 'with then and the from into onto down that this please thanks would could want make build give show have like very just you can now its too for are not set get let use see add all any new red blue gold pink';
   const KNOWN = [...new Set((VOCAB.map((g) => g[1]).join(' ').replace(/\([^)]*\)/g, '') + ' ' + FILLER).toLowerCase().replace(/\u00a0/g, ' ').split(/\s+/).filter(Boolean))];
@@ -3020,6 +3020,11 @@ ${pad}${tgt}</Scene></X3D>`;
   const repair = (t) => t.replace(/[a-z]{3,}/g, (w) => { if (KNOWN.includes(w)) return w; let best = w, bd = 9;
     for (const k of KNOWN) { if (Math.abs(k.length - w.length) > 2) continue; const d = lev(w, k); if (d < bd) { bd = d; best = k; } }
     return bd <= (w.length <= 4 ? 1 : 2) ? best : w; });
+  const norm = (t) => t
+    .replace(/\b(?:pick|grab|grasp)(?:s|ed|ing|bed|bing)?\b/g, 'pick')
+    .replace(/\b(?:plac(?:e|es|ed|ing)|puts?|putting|position(?:s|ed|ing)?|deliver(?:s|ed|ing)?|drop(?:s|ped|ping)?(?! zone))\b/g, 'place')
+    .replace(/\b(?:solv(?:e|es|ed|ing)|reach(?:es|ed|ing)?|ik|inverse kinematics)\b/g, 'reach')
+    .replace(/\breach(?:[ ,]+reach)+\b/g, 'reach');
   const MISSES = [];
   const W = { one:1, two:2, three:3, four:4, five:5, six:6 }, COL = { orange:'orange', teal:'teal', cyan:'teal', aqua:'teal', violet:'violet', purple:'violet', lime:'lime', green:'lime' };
   let working = 0;
@@ -3043,7 +3048,7 @@ ${pad}${tgt}</Scene></X3D>`;
           b.onclick = () => { inp.value += (inp.value ? ' ' : '') + b.textContent; }; row.appendChild(b); }); feed.appendChild(row); });
       const note = document.createElement('div'); note.style.marginTop = '8px'; note.textContent = 'Numbers also work: "5-joint", "ball to 3 1", "pad to -2 1". Small typos are fixed automatically.'; feed.appendChild(note); return; }
     if (/^misses$/.test(t0)) { feed.textContent = MISSES.length ? 'Phrases I did not understand:\n' + MISSES.slice(-10).join('\n') : 'No misses yet.'; return; }
-    const t = repair(t0), did = []; let shape = false, demo = false, heldNote = false, m;
+    const t = norm(repair(t0)), did = []; let shape = false, heldNote = false, m;
     if ((m = t.match(/\b(\d|one|two|three|four|five|six)[- ]?(?:joint|dof|axis|axes|link|segment)s?\b/))) { S.n = Math.max(2, Math.min(6, W[m[1]] || +m[1])); while (S.ang.length < S.n) S.ang.push(-.6); did.push(S.n + ' joints'); shape = true; }
     for (const k in COL) if (new RegExp('\\b' + k + '\\b(?! (?:pad|zone))').test(t)) { S.pal = COL[k]; did.push(COL[k]); shape = true; break; }
     if (/\b(?:no|without)\s+(?:a\s+)?(?:gripper|claw)\b/.test(t)) { S.grip = false; did.push('no gripper'); shape = true; }
@@ -3056,8 +3061,12 @@ ${pad}${tgt}</Scene></X3D>`;
     if ((m = t.match(new RegExp('ball\\s*(?:to|at)\\s*' + N + sep + N + '(?:' + sep + N + ')?'))) && !S.held) { S.tx = +m[1]; if (m[3] !== undefined) { S.ty = Math.max(.2, +m[2]); S.tz = +m[3]; } else { S.ty = .2; S.tz = +m[2]; } did.push('ball moved'); }
     if (S.held && /\bball\s*(?:to|at)\b/.test(t)) heldNote = true;
     if ((m = t.match(new RegExp('(?:pad|zone)\\s*(?:to|at)\\s*' + N + sep + N)))) { S.dx = +m[1]; S.dz = +m[2]; did.push('drop zone moved'); }
-    if (/\b(random|surprise me)\b/.test(t) || (!shape && (/\bgenerate\b/.test(t) || (/\b(?:create|make|build|add)\b/.test(t) && /\b(?:armature|robot|manipulator|arm)\b/.test(t))))) { await generate(false); did.push('random robot'); demo = true; }
-    else if (shape) { seq++; S.held = false; S.g = 0; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); build(); clearTimeout(timer); await render(); }
+    const wantsNew = !shape && ((/\b(?:generate|create|make|build|add|new)\b/.test(t) && /\b(?:armature|robot|manipulator|arm)\b/.test(t)) || /^generate\b/.test(t));
+    if (/\b(random|surprise me)\b/.test(t)) { await generate(false); did.push('random robot'); }
+    else if (shape || wantsNew) {
+      if (wantsNew) { Object.assign(S, { n: 3, len: 2, taper: .8, grip: true, pal: 'orange', yaw: 0, ang: [-.5, -1, -1.2] }); did.push('new armature (3 joints, orange; say more to change it)'); }
+      seq++; S.held = false; S.g = 0; if (Robo.collides(S.ang)) S.ang = Array(S.n).fill(-.3); build(); clearTimeout(timer); await render();
+    }
     else if (did.length) { build(); live(); }
     await settle();
     const ui$ = (q) => ui.querySelector(q), acts = [];
@@ -3070,12 +3079,9 @@ ${pad}${tgt}</Scene></X3D>`;
       inp.blur();
       if (a === 'pick') { if (await pick()) did.push('picked up the ball'); else { failed = 'pick'; break; } }
       else if (a === 'place') { if (await place()) did.push('placed it'); else { failed = 'place'; break; } }
-      else if (a === 'reach') { ui$('.rbsolve').click(); await sleep(1000); did.push('reached the ball'); }
+      else if (a === 'reach') { ui$('.rbsolve').click(); await sleep(1000); did.push('solved IK to the ball'); }
       else if (a === 'wave') { const mo = ui$('.mot'); if (mo && !mo.checked) { mo.checked = true; mo.onchange(); } did.push('motion on'); }
       else if (a === 'stop') { seq++; const mo = ui$('.mot'); if (mo && mo.checked) { mo.checked = false; mo.onchange(); } did.push('stopped'); }
-    }
-    if (demo && !acts.length) {
-      if (await pick()) { did.push('picked up the ball'); if (await place()) did.push('placed it on the pad'); else failed = 'place'; } else failed = 'pick';
     }
     const ignored = [...new Set((t.match(/[a-z]{3,}/g) || []).filter((w) => !KNOWN.includes(w)))].slice(0, 6);
     if (did.length || failed) { feed.textContent = (t !== t0 ? 'Read as "' + t + '". ' : '') + 'Did: ' + (did.join(', ') || 'nothing yet') + '.' + (failed ? '\nStopped at "' + failed + '": ' + MSG.textContent : '') + (ignored.length ? '\nIgnored (not in my vocabulary): ' + ignored.join(', ') + '. Type "vocab" to see what I know.' : ''); inp.value = ''; return; }
@@ -3204,6 +3210,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31n  Robotics: Go follows the sentence (picks/picking, positions, solve IK, target understood); only the word random makes a random robot; no automatic demo',
   '2026-10-31m  Robotics: clear message when the ball is held and you ask to move it',
   '2026-10-31l  Robotics: Go button gives instant feedback, shows live progress and errors, and is reliable on iPad touch',
   '2026-10-31k  Robotics: Generate builds a robot proven able to finish, then solves IK, picks up the ball and places it on the pad',
