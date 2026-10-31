@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31u · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31w · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -3030,11 +3030,24 @@ ${pad}${tgt}</Scene></X3D>`;
   let working = 0;
   const FEED = () => PROMPT.querySelector('#rbFeed');
   new MutationObserver(() => { if (working > 0 && MSG.textContent) FEED().textContent = 'Working… ' + MSG.textContent; }).observe(MSG, { childList: true, characterData: true, subtree: true });
+  /* Go with nothing typed: carry on from the CURRENT setup (your robot, your ball, your pad) and finish the job. */
+  async function continueTask() {
+    const feed = FEED(), did = [], first = []; let rebuild = false;
+    if (!S.grip) { S.grip = true; rebuild = true; first.push('turned the gripper on (it was off)'); }
+    if (!S.held && Math.hypot(S.tx - S.dx, S.tz - S.dz) < .35) { S.dx = -S.dx; first.push('the ball was already on the pad, so I moved the pad to the other side'); }
+    if (rebuild) { build(); clearTimeout(timer); await render(); } else { build(); live(); }
+    await settle();
+    const f = (v) => (+v).toFixed(1), at = S.held ? 'in the gripper' : 'at (' + f(S.tx) + ', ' + f(S.ty) + ', ' + f(S.tz) + ')';
+    feed.textContent = 'Using your setup: ' + S.n + ' joints, ' + S.pal + '; ball ' + at + '; pad at (' + f(S.dx) + ', ' + f(S.dz) + ').' + (first.length ? '\nFirst: ' + first.join('; ') + '.' : '');
+    const head = feed.textContent; let failed = '';
+    if (!S.held) { did.push('solved IK to the ball'); if (await pick()) did.push('picked up the ball'); else failed = 'pick'; }
+    if (!failed) { if (await place()) did.push('placed it on the pad'); else failed = 'place'; }
+    feed.textContent = head + '\nDid: ' + (did.join(', ') || 'nothing') + '.' + (failed ? '\nStopped at "' + failed + '": ' + MSG.textContent : '');
+  }
   async function run(cmd) {
     const feed = FEED(), shown = (cmd !== undefined ? cmd : PROMPT.querySelector('#rbText').value).trim();
-    if (!shown) cmd = 'generate an armature';   // nothing typed: Go builds the default armature and finishes the whole task
-    working++; feed.textContent = shown ? 'Working on “' + shown + '”…' : 'Box is empty, so: generating an armature, solving IK, picking up the ball, placing it…';
-    try { await runInner(cmd); } catch (e) { feed.textContent = 'Something went wrong: ' + (e && e.message ? e.message : e); console.error(e); } finally { working--; }
+    working++; feed.textContent = shown ? 'Working on “' + shown + '”…' : 'Box is empty, so I am using your current setup…';
+    try { await (shown ? runInner(cmd) : continueTask()); } catch (e) { feed.textContent = 'Something went wrong: ' + (e && e.message ? e.message : e); console.error(e); } finally { working--; }
   }
   async function runInner(cmd) {
     const inp = PROMPT.querySelector('#rbText'), feed = PROMPT.querySelector('#rbFeed'), t0 = (cmd !== undefined ? cmd : inp.value).toLowerCase().trim();
@@ -3215,6 +3228,8 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31w  Robotics: Go summary no longer repeats the pre-steps',
+  '2026-10-31v  Robotics: Go with an empty box continues from your current setup (robot, gripper, ball, pad) instead of resetting to defaults',
   '2026-10-31u  Robotics: page opened or reloaded at #robotics lands on the Robotics tab; Working message stays visible after Go',
   '2026-10-31t  Robotics: pressing Go with an empty box generates an armature and completes the task (IK, pick, place)',
   '2026-10-31s  Robotics: Go generates what you typed AND finishes the job (solve IK, pick up the ball, place it); spelled-out steps run as written',
