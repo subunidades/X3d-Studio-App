@@ -30,6 +30,23 @@
 body[data-mode="kahler"] { --accent: #4f6ef7; --accent-l: #8da2ff; }
 body[data-mode="robotics"] { --accent: #f59e0b; --accent-l: #fcd34d; }
 .rb{padding:12px;display:flex;flex-direction:column;gap:7px;font-size:12px}.rb label{display:grid;grid-template-columns:78px 1fr 40px;gap:8px;align-items:center;color:var(--muted)}.rb input[type=range]{width:100%;accent-color:var(--accent)}.rb output{font-family:var(--mono);color:var(--text);text-align:right}.rb h2{margin-top:6px}.rb select{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px}
+#rbFeed{margin-top:10px;padding:10px 12px 11px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--muted);color:var(--text);font-size:13px;line-height:1.5;display:flex;flex-direction:column;gap:6px;position:relative;overflow-wrap:anywhere}
+#rbFeed:empty{display:none}
+#rbFeed[data-state="working"]{border-left-color:var(--accent);background:linear-gradient(90deg,rgba(245,158,11,.10),transparent 70%),var(--panel2)}
+#rbFeed[data-state="done"]{border-left-color:var(--green);background:linear-gradient(90deg,rgba(16,185,129,.10),transparent 70%),var(--panel2)}
+#rbFeed[data-state="stop"]{border-left-color:#f87171;background:linear-gradient(90deg,rgba(248,113,113,.10),transparent 70%),var(--panel2)}
+#rbFeed .rb-lbl{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-right:6px}
+#rbFeed .rb-row,#rbFeed .rb-line,#rbFeed .rb-read{display:block}
+#rbFeed .rb-read{color:var(--muted);font-style:italic;font-size:12px}
+#rbFeed .rb-row.rb-bad{color:#fca5a5}#rbFeed .rb-row.rb-bad .rb-lbl{color:#f87171}
+#rbFeed .rb-row.rb-warn{color:var(--accent-l)}#rbFeed .rb-row.rb-warn .rb-lbl{color:var(--accent-l)}
+#rbFeed .rb-steps{list-style:none;margin:2px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+#rbFeed .rb-steps li{display:flex;gap:9px;align-items:flex-start}
+#rbFeed .rb-steps li::before{content:"✓";flex:none;width:17px;height:17px;border-radius:50%;background:rgba(16,185,129,.18);color:var(--green);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+#rbFeed[data-state="stop"] .rb-steps li::before{background:rgba(248,113,113,.16);color:#f87171}
+#rbFeed .rb-spin{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid rgba(245,158,11,.30);border-top-color:var(--accent);animation:rbspin .8s linear infinite;margin-right:8px;vertical-align:-2px}
+@keyframes rbspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#rbFeed .rb-spin{animation:none}}
 html, body { height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
   font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
 button { font-family: inherit; color: inherit; }
@@ -222,7 +239,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31x · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31z · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -2994,7 +3011,7 @@ ${pad}${tgt}</Scene></X3D>`;
   }
   /* ── Prompt box: plain phrase matching, no network ── */
   const PROMPT = document.createElement('div');
-  PROMPT.innerHTML = '<h2 class="cap">Describe it — or tap a chip</h2><div style="display:flex;gap:6px"><input id="rbText" type="text" enterkeyhint="go" autocomplete="off" autocapitalize="off" placeholder="Press Go to build an armature and finish the task — or describe your own" style="flex:1;min-width:0;font-size:16px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)"><button type="button" class="hbtn" id="rbGo">Go</button></div><div id="rbFeed" style="color:var(--muted);margin-top:4px;white-space:pre-wrap"></div><div id="rbChips" style="margin-top:8px"></div>';
+  PROMPT.innerHTML = '<h2 class="cap">Describe it — or tap a chip</h2><div style="display:flex;gap:6px"><input id="rbText" type="text" enterkeyhint="go" autocomplete="off" autocapitalize="off" placeholder="Press Go to build an armature and finish the task — or describe your own" style="flex:1;min-width:0;font-size:16px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)"><button type="button" class="hbtn" id="rbGo">Go</button></div><div id="rbFeed" role="status" aria-live="polite"></div><div id="rbChips" style="margin-top:8px"></div>';
   const CH = [
     ['Build the robot', ['3-joint orange arm', '5-joint teal arm', '6-joint violet arm', 'long slim arm', 'short tapered arm', 'no gripper', 'gripper', 'random']],
     ['Move things', ['ball to 3 1', 'ball to -2 2', 'ball to 1.5 3', 'pad to -3 1', 'pad to 2 -2']],
@@ -3034,7 +3051,7 @@ ${pad}${tgt}</Scene></X3D>`;
     if (S.held || Math.hypot(S.tx - S.dx, S.tz - S.dz) >= .35) return '';
     const h = S.home && Math.hypot(S.home[0] - S.dx, S.home[2] - S.dz) > .6 ? S.home : [-S.dx, .2, S.dz];
     S.tx = h[0]; S.ty = h[1]; S.tz = h[2]; live();
-    return 'the ball was already on the pad, so I put it back at its start (the pad stays put)';
+    return 'put the ball back at its start (it was already on the pad, which stays put)';
   }
   /* Go with nothing typed: carry on from the CURRENT setup (your robot, your ball, your pad) and finish the job. */
   async function continueTask() {
@@ -3050,6 +3067,33 @@ ${pad}${tgt}</Scene></X3D>`;
     if (!failed) { if (await place()) did.push('placed it on the pad'); else failed = 'place'; }
     feed.textContent = head + '\nDid: ' + (did.join(', ') || 'nothing') + '.' + (failed ? '\nStopped at "' + failed + '": ' + MSG.textContent : '');
   }
+  const feedEl = PROMPT.querySelector('#rbFeed');
+  const splitTop = (str) => { const out = []; let d = 0, cur = ''; for (const ch of str) { if (ch === '(' || ch === '“') d++; if (ch === ')' || ch === '”') d--; if (ch === ',' && d <= 0) { out.push(cur.trim()); cur = ''; } else cur += ch; } if (cur.trim()) out.push(cur.trim()); return out; };
+  const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
+  const feedObs = new MutationObserver(() => paintFeed());
+  const watch = () => feedObs.observe(feedEl, { childList: true, characterData: true, subtree: true });
+  function paintFeed() {
+    const txt = feedEl.textContent.trim();
+    if (!txt) { feedEl.dataset.state = ''; return; }
+    if (feedEl.children.length) { feedEl.dataset.state = 'info'; return; }   // pills / vocab rows were appended: leave them alone
+    const state = /Stopped|Something went wrong|didn't understand|Blocked|can’t move/.test(txt) ? 'stop' : /Did:/.test(txt) ? 'done' : working > 0 ? 'working' : 'info';
+    const frag = document.createDocumentFragment();
+    if (state === 'working') frag.appendChild(mk('span', 'rb-spin'));
+    txt.split('\n').map((l) => l.trim()).filter(Boolean).forEach((line) => {
+      const di = line.indexOf('Did: '), pre = di > 0 ? line.slice(0, di).trim() : '';
+      if (di === 0 || (di > 0 && /^Read as/.test(pre))) {
+        if (pre) frag.appendChild(mk('div', 'rb-read', pre));
+        const row = mk('div', 'rb-row'); row.appendChild(mk('span', 'rb-lbl', 'Did:')); frag.appendChild(row);
+        const ul = mk('ul', 'rb-steps'); splitTop(line.slice(di + 5).replace(/\.$/, '')).forEach((it) => ul.appendChild(mk('li', '', it.charAt(0).toUpperCase() + it.slice(1)))); frag.appendChild(ul);
+      } else {
+        const m = line.match(/^(Using your setup:|First:|Stopped at "[^"]*":|Ignored \(not in my vocabulary\):|Working…|Working on)\s*(.*)$/);
+        if (m) { const row = mk('div', 'rb-row' + (/^Stopped/.test(m[1]) ? ' rb-bad' : /^Ignored/.test(m[1]) ? ' rb-warn' : '')); row.appendChild(mk('span', 'rb-lbl', m[1])); row.appendChild(document.createTextNode(m[2])); frag.appendChild(row); }
+        else frag.appendChild(mk('div', 'rb-line', line));
+      }
+    });
+    feedObs.disconnect(); feedEl.replaceChildren(frag); feedEl.dataset.state = state; watch();
+  }
+  watch();
   async function run(cmd) {
     const feed = FEED(), shown = (cmd !== undefined ? cmd : PROMPT.querySelector('#rbText').value).trim();
     working++; feed.textContent = shown ? 'Working on “' + shown + '”…' : 'Box is empty, so I am using your current setup…';
@@ -3235,6 +3279,8 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31z  Robotics: status card wording fix (no comma splitting a step in two)',
+  '2026-10-31y  Robotics: styled status card under the input (spinner while working, ✓ step list, red edge on stop, setup line)',
   '2026-10-31x  Robotics: the target pad never moves on its own; a ball already on the pad is put back at its start before the next run',
   '2026-10-31w  Robotics: Go summary no longer repeats the pre-steps',
   '2026-10-31v  Robotics: Go with an empty box continues from your current setup (robot, gripper, ball, pad) instead of resetting to defaults',
