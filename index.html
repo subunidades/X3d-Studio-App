@@ -222,7 +222,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31w · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31x · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -2968,7 +2968,7 @@ ${pad}${tgt}</Scene></X3D>`;
   async function pick() {
     if (!S.grip) { MSG.textContent = 'Turn the gripper on first.'; return false; }
     if (S.held) { MSG.textContent = 'Already holding the ball.'; return false; }
-    await settle(); cancelAnimationFrame(anim); anim = 0; const id = ++seq, [x, y, z] = [S.tx, S.ty, S.tz];
+    await settle(); cancelAnimationFrame(anim); anim = 0; const id = ++seq, [x, y, z] = [S.tx, S.ty, S.tz]; S.home = [x, y, z];
     MSG.textContent = 'Approaching…';
     let e = await move(x, y + 1.1, z, 0, 900, id); if (e === 99) return false;
     if (e > .1) { if (e !== 98) MSG.textContent = 'Ball is out of reach or blocked. Move X/Y/Z closer or add a joint.'; return false; }
@@ -3030,13 +3030,19 @@ ${pad}${tgt}</Scene></X3D>`;
   let working = 0;
   const FEED = () => PROMPT.querySelector('#rbFeed');
   new MutationObserver(() => { if (working > 0 && MSG.textContent) FEED().textContent = 'Working… ' + MSG.textContent; }).observe(MSG, { childList: true, characterData: true, subtree: true });
+  function ballBackToStart() {
+    if (S.held || Math.hypot(S.tx - S.dx, S.tz - S.dz) >= .35) return '';
+    const h = S.home && Math.hypot(S.home[0] - S.dx, S.home[2] - S.dz) > .6 ? S.home : [-S.dx, .2, S.dz];
+    S.tx = h[0]; S.ty = h[1]; S.tz = h[2]; live();
+    return 'the ball was already on the pad, so I put it back at its start (the pad stays put)';
+  }
   /* Go with nothing typed: carry on from the CURRENT setup (your robot, your ball, your pad) and finish the job. */
   async function continueTask() {
     const feed = FEED(), did = [], first = []; let rebuild = false;
     if (!S.grip) { S.grip = true; rebuild = true; first.push('turned the gripper on (it was off)'); }
-    if (!S.held && Math.hypot(S.tx - S.dx, S.tz - S.dz) < .35) { S.dx = -S.dx; first.push('the ball was already on the pad, so I moved the pad to the other side'); }
     if (rebuild) { build(); clearTimeout(timer); await render(); } else { build(); live(); }
     await settle();
+    { const note = ballBackToStart(); if (note) first.push(note); }
     const f = (v) => (+v).toFixed(1), at = S.held ? 'in the gripper' : 'at (' + f(S.tx) + ', ' + f(S.ty) + ', ' + f(S.tz) + ')';
     feed.textContent = 'Using your setup: ' + S.n + ' joints, ' + S.pal + '; ball ' + at + '; pad at (' + f(S.dx) + ', ' + f(S.dz) + ').' + (first.length ? '\nFirst: ' + first.join('; ') + '.' : '');
     const head = feed.textContent; let failed = '';
@@ -3098,6 +3104,7 @@ ${pad}${tgt}</Scene></X3D>`;
     }
     /* Go = generate what was described AND finish the job. If the sentence spells out its own steps, only those run (above). */
     if (built && !acts.length && !failed && S.grip) {
+      { const note = ballBackToStart(); if (note) did.push(note); }
       did.push('solved IK to the ball');
       if (await pick()) { did.push('picked up the ball'); if (await place()) did.push('placed it on the pad'); else failed = 'place'; } else failed = 'pick';
     }
@@ -3228,6 +3235,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31x  Robotics: the target pad never moves on its own; a ball already on the pad is put back at its start before the next run',
   '2026-10-31w  Robotics: Go summary no longer repeats the pre-steps',
   '2026-10-31v  Robotics: Go with an empty box continues from your current setup (robot, gripper, ball, pad) instead of resetting to defaults',
   '2026-10-31u  Robotics: page opened or reloaded at #robotics lands on the Robotics tab; Working message stays visible after Go',
