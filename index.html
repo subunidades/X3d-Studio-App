@@ -239,7 +239,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31z · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31ac · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -2845,7 +2845,8 @@ const Robo = (() => {
       chain = `<Transform DEF="J${i}" translation="0 ${i===0?.6:f(L[i-1])} 0" rotation="0 0 1 ${f(S.ang[i])}"><Shape><Sphere radius="${f(R[i]*1.5)}"/>${mat(c,.15)}</Shape>${link}${next}</Transform>`;
       if (i > 0) chain = chain; 
     }
-    const pad = `<Transform DEF="Pad" translation="${f(S.dx)} .02 ${f(S.dz)}"><Shape><Cylinder radius=".6" height=".04"/><Appearance><Material diffuseColor=".1 .9 .4" emissiveColor=".05 .6 .25"/></Appearance></Shape><Transform translation="0 .004 0"><Shape><Cylinder radius=".5" height=".04"/><Appearance><Material diffuseColor=".05 .12 .1"/></Appearance></Shape></Transform></Transform>`;
+    const wall = (ph) => `<Transform translation="${f(.76 * Math.sin(ph))} .13 ${f(.76 * Math.cos(ph))}" rotation="0 1 0 ${f(ph)}"><Shape><Box size=".27 .22 .05"/><Appearance><Material diffuseColor=".1 .9 .4" emissiveColor=".04 .5 .2" transparency=".12"/></Appearance></Shape></Transform>`;
+    const pad = `<Transform DEF="Pad" translation="${f(S.dx)} .02 ${f(S.dz)}"><Shape><Cylinder radius=".8" height=".04"/><Appearance><Material diffuseColor=".1 .9 .4" emissiveColor=".05 .6 .25"/></Appearance></Shape><Transform translation="0 .004 0"><Shape><Cylinder radius=".7" height=".04"/><Appearance><Material diffuseColor=".05 .12 .1"/></Appearance></Shape></Transform>${Array.from({ length: 20 }, (_, k) => wall(k * Math.PI / 10)).join('')}</Transform>`;
     const bp = ball(), tgt = `<Transform DEF="Tgt" translation="${bp.map(f).join(' ')}"><Shape><Sphere radius=".2"/><Appearance><Material diffuseColor="1 .3 .3" emissiveColor=".6 .1 .1" specularColor="1 1 1" shininess=".8"/></Appearance></Shape></Transform>`;
     return `<?xml version="1.0" encoding="UTF-8"?><X3D profile="Immersive" version="3.3"><head><meta name="generator" content="X3D Studio Robotics"/><meta name="gen" content="${S.gen}"/></head><Scene>
 <NavigationInfo type='"EXAMINE" "ANY"' headlight="false"/><Background skyColor="0.02 0.02 0.07, 0.1 0.12 0.25" skyAngle="1.5708"/>
@@ -2857,15 +2858,17 @@ const Robo = (() => {
 ${pad}${tgt}</Scene></X3D>`;
   }
   const H = .6, SH = .9;   // grasp point = hand origin + H along the last link; shoulder height SH
+  const WLIM = 2.9;   // wrist range; inside it the hand points exactly down
+  const wristAngle = (a) => { const sum = a.slice(0, S.n).reduce((p, q) => p + q, 0); return Math.max(-WLIM, Math.min(WLIM, Math.atan2(Math.sin(Math.PI - sum), Math.cos(Math.PI - sum)))); };
   function hand(c, dark, l) {
     if (!S.grip) return '';
     const fx = .38 - .12 * S.g, fa = .35 * (1 - S.g);
-    const fg = (id, x, a) => `<Transform DEF="${id}" translation="${f(x)} .3 0" rotation="0 0 1 ${f(a)}"><Transform translation="0 .3 0"><Shape><Box size=".12 .6 .16"/>${mat(c)}</Shape></Transform></Transform>`;
-    return `<Transform translation="0 ${f(l)} 0"><Shape><Box size=".9 .25 .4"/>${mat(dark)}</Shape>${fg('FL', -fx, fa)}${fg('FR', fx, -fa)}</Transform>`;
+    const fg = (id, x, a) => `<Transform DEF="${id}" translation="${f(x)} .3 0" rotation="0 0 1 ${f(a)}"><Transform translation="0 .25 0"><Shape><Box size=".12 .4 .16"/>${mat(c)}</Shape></Transform></Transform>`;
+    return `<Transform DEF="Wrist" translation="0 ${f(l)} 0" rotation="0 0 1 ${f(wristAngle(S.ang))}"><Shape><Box size=".9 .25 .4"/>${mat(dark)}</Shape>${fg('FL', -fx, fa)}${fg('FR', fx, -fa)}</Transform>`;
   }
   const pts = (a) => { const L = lens(); let A = 0, x = 0, y = 0; const P = [[0, 0]];
     for (let i = 0; i < S.n; i++) { A += a[i]; x += -Math.sin(A) * L[i]; y += Math.cos(A) * L[i]; P.push([x, y]); }
-    P.push([x - Math.sin(A) * H, y + Math.cos(A) * H]); return P; };
+    const Aw = A + wristAngle(a); P.push([x - Math.sin(Aw) * H, y + Math.cos(Aw) * H]); return P; };
   function grasp() { const e = pts(S.ang)[S.n + 1]; return [e[0] * Math.cos(S.yaw), SH + e[1], -e[0] * Math.sin(S.yaw)]; }
   const ball = () => S.held ? grasp() : [S.tx, S.ty, S.tz];
   /* Self-collision: the chain is planar, so links are 2-D capsules, joints are balls, the hand is a short capsule.
@@ -2894,15 +2897,15 @@ ${pad}${tgt}</Scene></X3D>`;
   }
   /* IK: base yaw aims at the target; planar CCD puts the GRASP POINT (between the fingers) on it */
   function solve(x = S.tx, y = S.ty, z = S.tz) {
-    const t = [Math.hypot(x, z), y - SH]; S.yaw = Math.atan2(-z, x);
+    const goal = [Math.hypot(x, z), y - SH], t = [goal[0], goal[1] + H]; S.yaw = Math.atan2(-z, x);   // the WRIST goes H above the grasp point
     const a = S.ang.slice(0, S.n);
     for (let it = 0; it < 80; it++) for (let j = S.n - 1; j >= 0; j--) {
-      const P = pts(a), e = P[S.n + 1], o = P[j];
+      const P = pts(a), e = P[S.n], o = P[j];
       const d = Math.atan2(t[1]-o[1], t[0]-o[0]) - Math.atan2(e[1]-o[1], e[0]-o[0]);
       const old = a[j]; a[j] = Math.max(-S.LIM, Math.min(S.LIM, a[j] + Math.atan2(Math.sin(d), Math.cos(d))));
       if (collides(a)) a[j] = old;   // never step into a self-collision
     }
-    S.ang = a; const e = pts(a)[S.n + 1]; return Math.hypot(e[0]-t[0], e[1]-t[1]);
+    S.ang = a; const e = pts(a)[S.n + 1]; return Math.hypot(e[0]-goal[0], e[1]-goal[1]);
   }
   /* Dry run of the whole task (hover, descend, grip, lift, carry, lower, release, retreat) with the same solver and
      the same collision test the real moves use. A robot is only offered if every step is reachable and collision-free. */
@@ -2931,7 +2934,7 @@ ${pad}${tgt}</Scene></X3D>`;
     Object.assign(S, { n: 3, len: 2, taper: .8, grip: true, yaw: 0, held: false, g: 0, tx: 2.4, ty: .2, tz: 1.2, dx: -2.4, dz: 1.2, ang: [-.5, -1, -1.2] });
     return false;
   }
-  return { S, x3d, solve, grasp, ball, collides, plan, randomize, PAL };
+  return { S, x3d, solve, grasp, ball, collides, plan, randomize, wrist: wristAngle, PAL };
 })();
 (() => {
   const S = Robo.S, ui = $('rbUI'); let timer = 0;
@@ -2944,6 +2947,7 @@ ${pad}${tgt}</Scene></X3D>`;
         sc.getNamedNode('Yaw').rotation = new X3D.SFRotation(0, 1, 0, S.yaw);
         for (let i = 0; i < S.n; i++) sc.getNamedNode('J' + i).rotation = R(S.ang[i]);
         sc.getNamedNode('Pad').translation = new X3D.SFVec3f(S.dx, .02, S.dz);
+        if (S.grip) sc.getNamedNode('Wrist').rotation = R(Robo.wrist(S.ang));
         const bp = Robo.ball(); sc.getNamedNode('Tgt').translation = new X3D.SFVec3f(bp[0], bp[1], bp[2]);
         if (S.grip) { const fx = .38 - .12 * S.g, fa = .35 * (1 - S.g), L = sc.getNamedNode('FL'), Rr = sc.getNamedNode('FR');
           L.translation = new X3D.SFVec3f(-fx, .3, 0); L.rotation = R(fa); Rr.translation = new X3D.SFVec3f(fx, .3, 0); Rr.rotation = R(-fa); }
@@ -2951,11 +2955,12 @@ ${pad}${tgt}</Scene></X3D>`;
     } catch (e) { redraw(); }   // scene not ready or node missing: fall back to a reload
     busy = false;
   }
+  const safePose = () => { if (!Robo.collides(S.ang)) return; for (const v of [-.3, -.2, -.4, -.1]) { S.ang = Array(S.n).fill(v); if (!Robo.collides(S.ang)) return; } };   // a shape change must never leave the arm inside itself
   const redraw = () => { clearTimeout(timer); timer = setTimeout(() => { if (mode === 'robotics') render(); }, 90); };
   const sl = (id, name, min, max, step, get, set, rebuild) => {
     const l = document.createElement('label'); l.innerHTML = `${name}<input type="range" min="${min}" max="${max}" step="${step}"><output></output>`;
     const i = l.querySelector('input'), o = l.querySelector('output'); i.value = get(); o.textContent = (+get()).toFixed(2);
-    i.oninput = () => { const old = get(); set(+i.value); if (/^j\d$/.test(id) && Robo.collides(S.ang)) { set(old); i.value = old; MSG.textContent = 'Blocked: the arm would hit itself, the floor, or its base.'; return; } o.textContent = (+i.value).toFixed(2); LIVE.test(id) ? live() : redraw(); };
+    i.oninput = () => { const old = get(); set(+i.value); if (/^j\d$/.test(id) && Robo.collides(S.ang)) { set(old); i.value = old; MSG.textContent = 'Blocked: the arm would hit itself, the floor, or its base.'; return; } o.textContent = (+i.value).toFixed(2); LIVE.test(id) ? live() : (safePose(), redraw()); };
     l.dataset.id = id; return l;
   };
   const MSG = document.createElement('div'); MSG.style.color = 'var(--muted)';
@@ -2967,6 +2972,7 @@ ${pad}${tgt}</Scene></X3D>`;
       S.yaw = p0.y + (p1.y - p0.y) * e; S.ang = p0.a.map((v, i) => v + (p1.a[i] - v) * e); S.g = p0.g + (p1.g - p0.g) * e; live();
       k < 1 ? (tw = requestAnimationFrame(go)) : res(true); }; tw = requestAnimationFrame(go); });
   async function move(x, y, z, g, ms, id) {
+    if (Robo.collides(S.ang)) { safePose(); live(); }
     const p0 = snap(), err = Robo.solve(x, y, z), p1 = snap(); p1.g = g; p1.y = p0.y + wrap(p1.y - p0.y);
     S.yaw = p0.y; S.ang = p0.a; S.g = p0.g;
     for (let k = 1; k <= 20; k++) { const q = p0.a.map((v, i) => v + (p1.a[i] - v) * k / 20); if (Robo.collides(q)) { MSG.textContent = 'Blocked: that path would make the arm hit itself or the floor.'; return 98; } }
@@ -2976,7 +2982,7 @@ ${pad}${tgt}</Scene></X3D>`;
   async function settle() {
     for (let k = 0; k < 50; k++) {
       try { const sc = (await viewer.ready).currentScene, g = sc.getMetaData ? sc.getMetaData('gen') : undefined;
-        sc.getNamedNode('Yaw'); sc.getNamedNode('J' + (S.n - 1)); sc.getNamedNode('Pad'); if (S.grip) sc.getNamedNode('FL');
+        sc.getNamedNode('Yaw'); sc.getNamedNode('J' + (S.n - 1)); sc.getNamedNode('Pad'); if (S.grip) { sc.getNamedNode('FL'); sc.getNamedNode('Wrist'); }
         if (g === undefined || g === null || String(g) === String(S.gen)) return true; } catch (e) {}
       await sleep(100);
     }
@@ -2996,12 +3002,12 @@ ${pad}${tgt}</Scene></X3D>`;
     build(); MSG.textContent = 'Holding the ball. Move the green drop zone if you like, then press Place.';
     return true;
   }
-  async function place() {
+  async function place(dest) {   // dest: [x, y, z] or nothing (= the bin)
     if (!S.held) { MSG.textContent = 'Not holding anything. Press Pick up ball first.'; return false; }
-    await settle(); cancelAnimationFrame(anim); anim = 0; const id = ++seq, [x, y, z] = [S.dx, .24, S.dz];
-    MSG.textContent = 'Carrying to the drop zone…';
+    await settle(); cancelAnimationFrame(anim); anim = 0; const id = ++seq, [x, y, z] = Array.isArray(dest) ? dest : [S.dx, .24, S.dz];
+    MSG.textContent = Array.isArray(dest) ? 'Carrying the ball back…' : 'Carrying to the bin…';
     let e = await move(x, y + 1.3, z, 1, 900, id); if (e === 99) return false;
-    if (e > .1) { if (e !== 98) MSG.textContent = 'The drop zone is out of reach or blocked. Move it closer to the arm.'; return false; }
+    if (e > .1) { if (e !== 98) MSG.textContent = 'That spot is out of reach or blocked. Move the bin (or the ball) closer to the arm.'; return false; }
     if ((e = await move(x, y, z, 1, 700, id)) === 99) return false;
     const g = Robo.grasp(); S.held = false; [S.tx, S.ty, S.tz] = g; live();
     if ((e = await move(x, y, z, 0, 450, id)) === 99) return false;
@@ -3027,7 +3033,7 @@ ${pad}${tgt}</Scene></X3D>`;
     ['Build', 'armature manipulator joint joints dof link segment arm robot long longer tall big short shorter small compact slim uniform tapered gripper claw no\u00a0gripper'],
     ['Colours', 'orange teal cyan aqua violet purple lime green'],
     ['Numbers', 'one two three four five six (2 to 6 joints)'],
-    ['Move', 'ball\u00a0to pad\u00a0to zone target'],
+    ['Move', 'ball\u00a0to pad\u00a0to bin\u00a0to zone target bin'],
     ['Do', 'pick grab grasp take place put drop deliver position reach solve ik wave dance animate stop'],
     ['Other', 'random surprise generate create help vocab misses'] ];
   const FILLER = 'with then and the from into onto down that this please thanks would could want make build give show have like very just you can now its too for are not set get let use see add all any new red blue gold pink';
@@ -3047,11 +3053,14 @@ ${pad}${tgt}</Scene></X3D>`;
   let working = 0;
   const FEED = () => PROMPT.querySelector('#rbFeed');
   new MutationObserver(() => { if (working > 0 && MSG.textContent) FEED().textContent = 'Working… ' + MSG.textContent; }).observe(MSG, { childList: true, characterData: true, subtree: true });
-  function ballBackToStart() {
+  /* If the ball is already in the bin, the ARM carries it back to where it started (the bin never moves). Returns '' (nothing to do), a note, or false (failed). */
+  async function carryBack() {
     if (S.held || Math.hypot(S.tx - S.dx, S.tz - S.dz) >= .35) return '';
-    const h = S.home && Math.hypot(S.home[0] - S.dx, S.home[2] - S.dz) > .6 ? S.home : [-S.dx, .2, S.dz];
-    S.tx = h[0]; S.ty = h[1]; S.tz = h[2]; live();
-    return 'put the ball back at its start (it was already on the pad, which stays put)';
+    const home = S.home && Math.hypot(S.home[0] - S.dx, S.home[2] - S.dz) > .6 ? S.home.slice() : [-S.dx, .2, S.dz];
+    FEED().textContent = 'The ball is already in the bin, so the arm carries it back to its start first…';
+    if (!(await pick())) return false;
+    if (!(await place(home))) return false;
+    return 'carried the ball back to its start (the bin stays put)';
   }
   /* Go with nothing typed: carry on from the CURRENT setup (your robot, your ball, your pad) and finish the job. */
   async function continueTask() {
@@ -3059,12 +3068,12 @@ ${pad}${tgt}</Scene></X3D>`;
     if (!S.grip) { S.grip = true; rebuild = true; first.push('turned the gripper on (it was off)'); }
     if (rebuild) { build(); clearTimeout(timer); await render(); } else { build(); live(); }
     await settle();
-    { const note = ballBackToStart(); if (note) first.push(note); }
+    { const back = await carryBack(); if (back === false) { feed.textContent = 'Stopped while carrying the ball back: ' + MSG.textContent; return; } if (back) first.push(back); }
     const f = (v) => (+v).toFixed(1), at = S.held ? 'in the gripper' : 'at (' + f(S.tx) + ', ' + f(S.ty) + ', ' + f(S.tz) + ')';
-    feed.textContent = 'Using your setup: ' + S.n + ' joints, ' + S.pal + '; ball ' + at + '; pad at (' + f(S.dx) + ', ' + f(S.dz) + ').' + (first.length ? '\nFirst: ' + first.join('; ') + '.' : '');
+    feed.textContent = 'Using your setup: ' + S.n + ' joints, ' + S.pal + '; ball ' + at + '; bin at (' + f(S.dx) + ', ' + f(S.dz) + ').' + (first.length ? '\nFirst: ' + first.join('; ') + '.' : '');
     const head = feed.textContent; let failed = '';
     if (!S.held) { did.push('solved IK to the ball'); if (await pick()) did.push('picked up the ball'); else failed = 'pick'; }
-    if (!failed) { if (await place()) did.push('placed it on the pad'); else failed = 'place'; }
+    if (!failed) { if (await place()) did.push('placed it in the bin'); else failed = 'place'; }
     feed.textContent = head + '\nDid: ' + (did.join(', ') || 'nothing') + '.' + (failed ? '\nStopped at "' + failed + '": ' + MSG.textContent : '');
   }
   const feedEl = PROMPT.querySelector('#rbFeed');
@@ -3123,7 +3132,7 @@ ${pad}${tgt}</Scene></X3D>`;
     const N = '(-?\\d+\\.?\\d*)', sep = '[ ,]+';
     if ((m = t.match(new RegExp('ball\\s*(?:to|at)\\s*' + N + sep + N + '(?:' + sep + N + ')?'))) && !S.held) { S.tx = +m[1]; if (m[3] !== undefined) { S.ty = Math.max(.2, +m[2]); S.tz = +m[3]; } else { S.ty = .2; S.tz = +m[2]; } did.push('ball moved'); }
     if (S.held && /\bball\s*(?:to|at)\b/.test(t)) heldNote = true;
-    if ((m = t.match(new RegExp('(?:pad|zone)\\s*(?:to|at)\\s*' + N + sep + N)))) { S.dx = +m[1]; S.dz = +m[2]; did.push('drop zone moved'); }
+    if ((m = t.match(new RegExp('(?:pad|zone|bin)\\s*(?:to|at)\\s*' + N + sep + N)))) { S.dx = +m[1]; S.dz = +m[2]; did.push('drop zone moved'); }
     const wantsNew = !shape && ((/\b(?:generate|create|make|build|add|new)\b/.test(t) && /\b(?:armature|robot|manipulator|arm)\b/.test(t)) || /^generate\b/.test(t));
     if (/\b(random|surprise me)\b/.test(t)) { await generate(false); did.push('random robot'); built = true; }
     else if (shape || wantsNew) {
@@ -3148,9 +3157,8 @@ ${pad}${tgt}</Scene></X3D>`;
     }
     /* Go = generate what was described AND finish the job. If the sentence spells out its own steps, only those run (above). */
     if (built && !acts.length && !failed && S.grip) {
-      { const note = ballBackToStart(); if (note) did.push(note); }
-      did.push('solved IK to the ball');
-      if (await pick()) { did.push('picked up the ball'); if (await place()) did.push('placed it on the pad'); else failed = 'place'; } else failed = 'pick';
+      const back = await carryBack(); if (back === false) failed = 'carry back'; else if (back) did.push(back);
+      if (!failed) { did.push('solved IK to the ball'); if (await pick()) { did.push('picked up the ball'); if (await place()) did.push('placed it in the bin'); else failed = 'place'; } else failed = 'pick'; }
     }
     const ignored = [...new Set((t.match(/[a-z]{3,}/g) || []).filter((w) => !KNOWN.includes(w)))].slice(0, 6);
     if (did.length || failed) { feed.textContent = (t !== t0 ? 'Read as "' + t + '". ' : '') + 'Did: ' + (did.join(', ') || 'nothing yet') + '.' + (failed ? '\nStopped at "' + failed + '": ' + MSG.textContent : '') + (ignored.length ? '\nIgnored (not in my vocabulary): ' + ignored.join(', ') + '. Type "vocab" to see what I know.' : ''); inp.value = ''; return; }
@@ -3171,7 +3179,7 @@ ${pad}${tgt}</Scene></X3D>`;
   PROMPT.querySelector('#rbText').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
   function build() {
     ui.innerHTML = ''; ui.appendChild(PROMPT); ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Generate</h2>');
-    const add = (n) => ui.appendChild(n), fresh = (fn) => (v) => { fn(v); build(); redraw(); };
+    const add = (n) => ui.appendChild(n), fresh = (fn) => (v) => { fn(v); safePose(); build(); redraw(); };
     add(sl('n','Joints',2,6,1,()=>S.n,fresh((v)=>{ S.n=v; while(S.ang.length<v) S.ang.push(-.6); })));
     add(sl('len','Link length',.8,3,.1,()=>S.len,(v)=>S.len=v));
     add(sl('taper','Taper',.5,1,.05,()=>S.taper,(v)=>S.taper=v));
@@ -3189,7 +3197,7 @@ ${pad}${tgt}</Scene></X3D>`;
     for (let i = 0; i < S.n; i++) add(sl('j'+i,'Joint '+(i+1),-S.LIM,S.LIM,.02,()=>S.ang[i],(v)=>S.ang[i]=v));
     ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Ball / reach target</h2>');
     add(sl('tx','X',-6,6,.1,()=>S.tx,(v)=>S.tx=v)); add(sl('ty','Y',.2,8,.1,()=>S.ty,(v)=>S.ty=v)); add(sl('tz','Z',-6,6,.1,()=>S.tz,(v)=>S.tz=v));
-    ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Drop zone (green pad)</h2>');
+    ui.insertAdjacentHTML('beforeend', '<h2 class="cap">Bin (where the ball goes)</h2>');
     add(sl('dx','X',-6,6,.1,()=>S.dx,(v)=>S.dx=v)); add(sl('dz','Z',-6,6,.1,()=>S.dz,(v)=>S.dz=v));
     const b = document.createElement('button'); b.className = 'hbtn rbsolve'; b.textContent = 'Solve IK → reach target';
     const msg = MSG;
@@ -3198,7 +3206,7 @@ ${pad}${tgt}</Scene></X3D>`;
       msg.textContent = err < .05 ? 'Reached target.' : 'Out of reach — closest pose shown (error ' + err.toFixed(2) + ').'; };
     add(b);
     const bpk = document.createElement('button'); bpk.className = 'hbtn'; bpk.textContent = 'Pick up ball'; bpk.onclick = pick; add(bpk);
-    const bpl = document.createElement('button'); bpl.className = 'hbtn'; bpl.textContent = 'Place at target'; bpl.onclick = place; add(bpl);
+    const bpl = document.createElement('button'); bpl.className = 'hbtn'; bpl.textContent = 'Place at target'; bpl.onclick = () => place(); add(bpl);
     add(msg);
   }
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -3213,9 +3221,9 @@ ${pad}${tgt}</Scene></X3D>`;
     if (!runTask) { feed.textContent = head; return true; }
     feed.textContent = head + 'Solving IK and picking up the ball…';
     if (!(await pick())) { feed.textContent = head + 'Stopped at pick: ' + MSG.textContent; return false; }
-    feed.textContent = head + 'Carrying it to the green pad…';
+    feed.textContent = head + 'Carrying it to the bin…';
     if (!(await place())) { feed.textContent = head + 'Stopped at place: ' + MSG.textContent; return false; }
-    feed.textContent = head + 'Done: picked up the ball and placed it on the pad.'; return true;
+    feed.textContent = head + 'Done: picked up the ball and placed it in the bin.'; return true;
   }
   $('rbRandom').onclick = () => generate(true);
   $('rbExport').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([Robo.x3d()], {type:'model/x3d+xml'})); a.download = 'robot_' + S.n + 'dof.x3d'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
@@ -3279,6 +3287,9 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-10-31ac  Robotics: wording says bin; "bin to x z" moves the bin',
+  '2026-10-31ab  Robotics: shape changes and planned moves start from a safe pose (fixes a blocked pick after shrinking the joint count)',
+  '2026-10-31aa  Robotics: hand stays vertical (points straight down) with shorter fingers; the bin has walls; the arm carries the ball back to its start',
   '2026-10-31z  Robotics: status card wording fix (no comma splitting a step in two)',
   '2026-10-31y  Robotics: styled status card under the input (spinner while working, ✓ step list, red edge on stop, setup line)',
   '2026-10-31x  Robotics: the target pad never moves on its own; a ball already on the pad is put back at its start before the next run',
