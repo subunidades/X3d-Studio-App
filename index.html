@@ -239,7 +239,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-10-31ac · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-11-01a · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -965,10 +965,18 @@ const FIT_SHAPES = new Set(['table', 'chair', 'stairs', 'spiralstairs', 'arch', 
 /** Mesh for any solid shape. Primitives that X3D has natively are also meshed here for wireframe mode. */
 const TILT_SHAPES = { mobius: 1.0, ripple: 0.55, terrain: 0.55, saddle: 0.45 }; // lie flat by construction; tip toward the camera
 const tiltX = (m, a) => xform(m, ([x, y, z]) => [x, y * Math.cos(a) - z * Math.sin(a), y * Math.sin(a) + z * Math.cos(a)]);
+/** Translate a mesh so the centre of its bounding box sits exactly on the local origin. */
+function recentre(m) {
+  if (!m.pts.length) return m;
+  const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  m.pts.forEach((p) => p.forEach((v, k) => { lo[k] = Math.min(lo[k], v); hi[k] = Math.max(hi[k], v); }));
+  const c = lo.map((v, k) => (v + hi[k]) / 2);
+  return c.every((v) => Math.abs(v) < 1e-9) ? m : xform(m, (p) => p.map((v, k) => v - c[k]));
+}
 function meshOf(shape, s) {
   let m = rawMeshOf(shape, s);
-  if (FIT_SHAPES.has(shape)) m = fit(m, s);
-  return TILT_SHAPES[shape] ? tiltX(m, TILT_SHAPES[shape]) : m;
+  m = FIT_SHAPES.has(shape) ? fit(m, s) : recentre(m);   // fit() already centres; everything else gets centred here
+  return recentre(TILT_SHAPES[shape] ? tiltX(m, TILT_SHAPES[shape]) : m);
 }
 
 function rawMeshOf(shape, s) {
@@ -1256,6 +1264,18 @@ class Scene {
   undo() { if (!this._undo.length) return false; this._redo.push(JSON.stringify(this)); return this.restore(JSON.parse(this._undo.pop())); }
   redo() { if (!this._redo.length) return false; this._undo.push(JSON.stringify(this)); return this.restore(JSON.parse(this._redo.pop())); }
 
+  /** Default camera: looks straight at the middle of everything in the scene, so the group sits dead-centre in the viewport. */
+  centredViewpoint() {
+    if (!this.objects.length) return VIEWPOINTS.reset;
+    const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+    for (const o of this.objects) {
+      const st = o.stretch || [1, 1, 1], r = o.size * 1.3;
+      o.position.forEach((v, k) => { lo[k] = Math.min(lo[k], v - r * st[k]); hi[k] = Math.max(hi[k], v + r * st[k]); });
+    }
+    const c = lo.map((v, k) => (v + hi[k]) / 2), R = Math.hypot(...hi.map((v, k) => (v - lo[k]) / 2)), d = Math.max(10, R * 2.6);
+    return `<Viewpoint description="Default" position="${f3(c[0])} ${f3(c[1])} ${f3(c[2] + d)}" orientation="0 1 0 0" centerOfRotation="${c.map(f3).join(' ')}"/>`;
+  }
+
   groundY() {
     if (!this.objects.length) return -1;
     return Math.min(-0.5, Math.min(...this.objects.map((o) => o.position[1] - o.size * (o.stretch ? o.stretch[1] : 1) * 1.02))) - 0.02;
@@ -1307,7 +1327,7 @@ class Scene {
 <X3D profile="Immersive" version="3.3">
   <Scene>
 ${this.backgroundXml()}    <NavigationInfo type='"EXAMINE" "ANY"'/>
-${this.lightsXml()}    ${this.viewpoint || VIEWPOINTS.reset}
+${this.lightsXml()}    ${this.viewpoint || this.centredViewpoint()}
 ${this.environmentXml()}${this.contentXml()}  </Scene>
 </X3D>
 `;
@@ -2315,7 +2335,7 @@ function execute0(scene, text) {
   if (/\b(?:starter|demo|showcase|sample|intro)\s+(?:scene|world)\b|^(?:starter|demo|showcase)$/.test(t)) {
     scene.reset();
     for (const c of STARTER_COMMANDS) execute(scene, c);
-    scene.viewpoint = '<Viewpoint description="Starter" position="0 1.2 11" orientation="1 0 0 -0.1"/>';
+    scene.viewpoint = null;   // auto-centred on the starter objects
     return ok('Loaded the starter scene. Try: make the cube red · spin the cone · add fog · undo');
   }
   if (/\bredo\b/.test(t)) return scene.redo() ? ok('Redone.', { noHistory: true }) : info('Nothing to redo.');
@@ -2335,7 +2355,7 @@ function execute0(scene, text) {
   if (arch) return { status: 'pending', archiveKey: arch[2] };
 
   for (const [view, phrases] of [['reset', DATA.CAM_RESET], ['top', DATA.CAM_TOP], ['front', DATA.CAM_FRONT], ['side', DATA.CAM_SIDE], ['iso', DATA.CAM_ISO], ['zoom_in', DATA.CAM_ZOOM_IN], ['zoom_out', DATA.CAM_ZOOM_OUT]]) {
-    if (has(t, phrases)) { scene.viewpoint = VIEWPOINTS[view]; return ok(`Camera set to ${view.replace('_', ' ')} view.`); }
+    if (has(t, phrases)) { scene.viewpoint = view === 'reset' ? null : VIEWPOINTS[view]; return ok(`Camera set to ${view.replace('_', ' ')} view.`); }
   }
   const la = t.match(/\b(?:look at|focus on|focus|zoom to|zoom on|zoom into|center on|centre on|fly to|frame|show me the|take me to the)\s+(?:the\s+)?(.+)$/);
   if (la && scene.objects.length) {
@@ -3287,6 +3307,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-11-01a  Agent: every shape is centred on its own origin; the default camera frames the middle of the whole scene (reset camera and the starter scene re-centre too)',
   '2026-10-31ac  Robotics: wording says bin; "bin to x z" moves the bin',
   '2026-10-31ab  Robotics: shape changes and planned moves start from a safe pose (fixes a blocked pick after shrinking the joint count)',
   '2026-10-31aa  Robotics: hand stays vertical (points straight down) with shorter fingers; the bin has walls; the arm carries the ball back to its start',
