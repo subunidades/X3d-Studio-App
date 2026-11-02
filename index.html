@@ -239,7 +239,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-11-01a · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-11-01b · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -965,18 +965,87 @@ const FIT_SHAPES = new Set(['table', 'chair', 'stairs', 'spiralstairs', 'arch', 
 /** Mesh for any solid shape. Primitives that X3D has natively are also meshed here for wireframe mode. */
 const TILT_SHAPES = { mobius: 1.0, ripple: 0.55, terrain: 0.55, saddle: 0.45 }; // lie flat by construction; tip toward the camera
 const tiltX = (m, a) => xform(m, ([x, y, z]) => [x, y * Math.cos(a) - z * Math.sin(a), y * Math.sin(a) + z * Math.cos(a)]);
-/** Translate a mesh so the centre of its bounding box sits exactly on the local origin. */
-function recentre(m) {
-  if (!m.pts.length) return m;
+/** Exact centre of a mesh.
+ *  y  = midpoint between the lowest and highest horizontal plane over EVERY vertex.
+ *  xz = the vertical symmetry axis when the vertex set is n-fold rotationally symmetric about it
+ *       (then the vertex centroid IS the axis, exactly); otherwise the middle of the xz bounding box,
+ *       which for mirror-symmetric shapes is the mirror line. */
+const SYM_ORDERS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 64];
+function symmetryAxisXZ(pts) {
+  const n = pts.length;
+  let cx = 0, cz = 0, R = 0;
+  for (const p of pts) { cx += p[0]; cz += p[2]; }
+  cx /= n; cz /= n;
+  for (const p of pts) R = Math.max(R, Math.hypot(p[0] - cx, p[2] - cz));
+  if (R < 1e-9) return [cx, cz];
+  const tol = R * 1e-6, cell = tol * 4, key = (a, b, c) => a + ',' + b + ',' + c;
+  const grid = new Map();
+  for (const p of pts) { const k = key(Math.round(p[0] / cell), Math.round(p[1] / cell), Math.round(p[2] / cell)); (grid.get(k) || grid.set(k, []).get(k)).push(p); }
+  const has = (x, y, z) => {
+    const ix = Math.round(x / cell), iy = Math.round(y / cell), iz = Math.round(z / cell);
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+      const bucket = grid.get(key(ix + a, iy + b, iz + c));
+      if (bucket) for (const q of bucket) if (Math.abs(q[0] - x) <= tol && Math.abs(q[1] - y) <= tol && Math.abs(q[2] - z) <= tol) return true;
+    }
+    return false;
+  };
+  for (const k of SYM_ORDERS) {
+    const a = (2 * Math.PI) / k, ca = Math.cos(a), sa = Math.sin(a);
+    if (pts.every((p) => { const dx = p[0] - cx, dz = p[2] - cz; return has(cx + dx * ca - dz * sa, p[1], cz + dx * sa + dz * ca); })) return [cx, cz];
+  }
+  return null;
+}
+function meshCentre(m) {
   const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
   m.pts.forEach((p) => p.forEach((v, k) => { lo[k] = Math.min(lo[k], v); hi[k] = Math.max(hi[k], v); }));
-  const c = lo.map((v, k) => (v + hi[k]) / 2);
-  return c.every((v) => Math.abs(v) < 1e-9) ? m : xform(m, (p) => p.map((v, k) => v - c[k]));
+  const axis = symmetryAxisXZ(m.pts);
+  return [axis ? axis[0] : (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, axis ? axis[1] : (lo[2] + hi[2]) / 2];
 }
+function recentre(m) {
+  if (!m.pts.length) return m;
+  const c = meshCentre(m);
+  return c.every((v) => Math.abs(v) < 1e-12) ? m : xform(m, (p) => [p[0] - c[0], p[1] - c[1], p[2] - c[2]]);
+}
+const MESH_CACHE = new Map();
 function meshOf(shape, s) {
+  const ck = shape + '|' + s, hit = MESH_CACHE.get(ck);
+  if (hit) return hit;
   let m = rawMeshOf(shape, s);
-  m = FIT_SHAPES.has(shape) ? fit(m, s) : recentre(m);   // fit() already centres; everything else gets centred here
-  return recentre(TILT_SHAPES[shape] ? tiltX(m, TILT_SHAPES[shape]) : m);
+  m = FIT_SHAPES.has(shape) ? fit(m, s) : m;             // fit() scales to size; the exact centring happens below for every shape
+  m = recentre(TILT_SHAPES[shape] ? tiltX(m, TILT_SHAPES[shape]) : m);
+  if (MESH_CACHE.size > 400) MESH_CACHE.clear();
+  MESH_CACHE.set(ck, m);
+  return m;
+}
+
+/** True world-axis bounds of an object relative to its own position: { lo:[x,y,z], hi:[x,y,z] }.
+ *  Built from every vertex, after ellipsoid base scale, stretch and rotation, so y covers every horizontal plane. */
+const EXT_CACHE = new Map();
+function objectBounds(o) {
+  normObj(o);
+  const base = o.shape === 'ellipsoid' ? [1, 0.65, 1.45] : [1, 1, 1], sc = base.map((v, k) => v * o.stretch[k]), s = o.size;
+  const ck = [o.shape, s, sc.join(','), (o.rotation || []).join(','), o.shape === 'text' ? (o.text || '').length : ''].join('|');
+  const hit = EXT_CACHE.get(ck);
+  if (hit) return hit;
+  let pts;
+  if (o.shape === 'text') { const hw = Math.max(1, (o.text || 'text').length) * 0.33 * s, hh = 0.6 * s; pts = [[-hw, -hh, 0], [hw, hh, 0]]; }
+  else if (o.shape === 'tesseract') pts = linesOf('tesseract', s).pts;
+  else pts = meshOf(o.shape, s).pts;
+  let q = pts.map((p) => [p[0] * sc[0], p[1] * sc[1], p[2] * sc[2]]);
+  if (o.rotation && o.rotation[3]) {
+    const L = Math.hypot(o.rotation[0], o.rotation[1], o.rotation[2]) || 1, [ux, uy, uz] = [o.rotation[0] / L, o.rotation[1] / L, o.rotation[2] / L];
+    const a = o.rotation[3], c = Math.cos(a), si = Math.sin(a), t = 1 - c;
+    q = q.map(([x, y, z]) => [
+      (t * ux * ux + c) * x + (t * ux * uy - si * uz) * y + (t * ux * uz + si * uy) * z,
+      (t * ux * uy + si * uz) * x + (t * uy * uy + c) * y + (t * uy * uz - si * ux) * z,
+      (t * ux * uz - si * uy) * x + (t * uy * uz + si * ux) * y + (t * uz * uz + c) * z]);
+  }
+  const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  q.forEach((p) => p.forEach((v, k) => { lo[k] = Math.min(lo[k], v); hi[k] = Math.max(hi[k], v); }));
+  const res = { lo, hi };
+  if (EXT_CACHE.size > 600) EXT_CACHE.clear();
+  EXT_CACHE.set(ck, res);
+  return res;
 }
 
 function rawMeshOf(shape, s) {
@@ -1067,7 +1136,8 @@ const SHAPE_LABEL = { stairs: 'staircase', torusknot: 'torus knot', spiralstairs
 const shapeLabel = (s) => SHAPE_LABEL[s] || s;
 const pluralOf = (w) => (/(x|s|z|ch|sh)$/.test(w) ? w + 'es' : w + 's');
 
-const pointStr = (pts) => pts.map((p) => `${f3(p[0])} ${f3(p[1])} ${f3(p[2])}`).join(' ');
+const f5 = (n) => (Math.abs(n) < 5e-6 ? 0 : n).toFixed(5).replace(/\.?0+$/, '');
+const pointStr = (pts) => pts.map((p) => `${f5(p[0])} ${f5(p[1])} ${f5(p[2])}`).join(' ');
 function edgesOf(m) {
   const seen = new Set(), out = [];
   for (const f of m.faces) for (let k = 0; k < f.length; k++) {
@@ -1269,8 +1339,8 @@ class Scene {
     if (!this.objects.length) return VIEWPOINTS.reset;
     const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
     for (const o of this.objects) {
-      const st = o.stretch || [1, 1, 1], r = o.size * 1.3;
-      o.position.forEach((v, k) => { lo[k] = Math.min(lo[k], v - r * st[k]); hi[k] = Math.max(hi[k], v + r * st[k]); });
+      const b = objectBounds(o);
+      o.position.forEach((v, k) => { lo[k] = Math.min(lo[k], v + b.lo[k] * 1.3); hi[k] = Math.max(hi[k], v + b.hi[k] * 1.3); });
     }
     const c = lo.map((v, k) => (v + hi[k]) / 2), R = Math.hypot(...hi.map((v, k) => (v - lo[k]) / 2)), d = Math.max(10, R * 2.6);
     return `<Viewpoint description="Default" position="${f3(c[0])} ${f3(c[1])} ${f3(c[2] + d)}" orientation="0 1 0 0" centerOfRotation="${c.map(f3).join(' ')}"/>`;
@@ -1278,7 +1348,7 @@ class Scene {
 
   groundY() {
     if (!this.objects.length) return -1;
-    return Math.min(-0.5, Math.min(...this.objects.map((o) => o.position[1] - o.size * (o.stretch ? o.stretch[1] : 1) * 1.02))) - 0.02;
+    return Math.min(-0.5, Math.min(...this.objects.map((o) => o.position[1] + objectBounds(o).lo[1]))) - 0.02;
   }
 
   lightsXml() {
@@ -1424,11 +1494,17 @@ function parseRelation(t, scene) {
   return { rel, ref: scene.objects[tg.idx[tg.idx.length - 1]], subject: t.slice(0, m.index), start: m.index };
 }
 
-function relPos(ref, rel, selfSize) {
+/** Where the centre of a new/moved object lands next to `ref`. Uses the true bounding planes of both objects,
+ *  so the gap is the same whatever either shape is. `self` is an object-like { shape, size, rotation, stretch } or a plain size. */
+function relPos(ref, rel, self) {
   normObj(ref);
-  const g = 0.3, dx = ref.size * ref.stretch[0] * 1.05 + selfSize * 1.05 + g, dy = ref.size * ref.stretch[1] * 1.05 + selfSize * 1.05 + g, dz = ref.size * ref.stretch[2] * 1.05 + selfSize * 1.05 + g;
-  const v = { left: [-dx, 0, 0], right: [dx, 0, 0], beside: [dx, 0, 0], above: [0, dy, 0], below: [0, -dy, 0], behind: [0, 0, -dz], front: [0, 0, dz] }[rel];
-  return ref.position.map((p, k) => p + v[k]);
+  const g = 0.3, sb = typeof self === 'number' ? { lo: [-self, -self, -self], hi: [self, self, self] } : objectBounds(self), rb = objectBounds(ref);
+  const d = {
+    left: [rb.lo[0] - g - sb.hi[0], 0, 0], right: [rb.hi[0] + g - sb.lo[0], 0, 0], beside: [rb.hi[0] + g - sb.lo[0], 0, 0],
+    above: [0, rb.hi[1] + g - sb.lo[1], 0], below: [0, rb.lo[1] - g - sb.hi[1], 0],
+    behind: [0, 0, rb.lo[2] - g - sb.hi[2]], front: [0, 0, rb.hi[2] + g - sb.lo[2]],
+  }[rel];
+  return ref.position.map((p, k) => p + d[k]);
 }
 
 /* ── Arrangements ──────────────────────────────────────────────────────────── */
@@ -1737,7 +1813,7 @@ function runEdit(scene, t, orig) {
     if (ops.move) {
       if (ops.move.abs) o.position = [...ops.move.abs];
       else if (ops.move.delta) o.position = o.position.map((p, k) => p + ops.move.delta[k]);
-      else if (ops.move.relation) o.position = relPos(ops.move.relation.ref, ops.move.relation.rel, o.size);
+      else if (ops.move.relation) o.position = relPos(ops.move.relation.ref, ops.move.relation.rel, o);
     }
   }
   scene._focus = targets[targets.length - 1];
@@ -1772,7 +1848,7 @@ function runAdd(scene, t, orig) {
   const color = style.forceColor || ci.rgb;
   const cname = ci.defaulted && style.texture === 'rainbow' ? 'rainbow' : style.forceColor ? (style.color2 && style.color2[0] > 0.8 && style.forceColor[0] > 0.5 ? 'candy' : 'zebra') : ci.name;
   const size = relSize(tc, scene) ?? parseSize(tc), rotation = parseRotation(tc), an = parseAnimations(tc);
-  const position = rel ? relPos(rel.ref, rel.rel, size) : parsePosition(tc);
+  const position = rel ? relPos(rel.ref, rel.rel, { shape, size, rotation, stretch: [1, 1, 1], text: text || '' }) : parsePosition(tc);
   let count = shape === 'text' ? 1 : parseCount(tc);
   if (count === 1 && sh.plural && shape !== 'text') count = 3;
   if (scene.objects.length + count > 300) return { status: 'info', message: 'That would make the scene very heavy (300 object limit). Try fewer, or clear some first.' };
@@ -1930,9 +2006,8 @@ const QUESTION_RE = /^(?:how|what|which|where|why|who|when|is|are|does|do|did|ca
 const QUESTION_HELP = 'That sounds like a question, so I did not change the scene. I can answer: where is the cube · what color is the sphere · how big is the sphere · how many red cubes · is there a cone · what is in the scene';
 function settleOnGround(scene, objs) {
   const others = scene.objects.filter((o) => !objs.includes(o));
-  const sy = (o) => o.size * (o.stretch ? o.stretch[1] : 1) * 1.02;
-  const g = others.length ? Math.min(...others.map((o) => o.position[1] - sy(o))) : 0;
-  objs.forEach((o) => { o.position[1] = g + sy(o); });
+  const g = others.length ? Math.min(...others.map((o) => o.position[1] + objectBounds(o).lo[1])) : 0;   // lowest horizontal plane in the scene
+  objs.forEach((o) => { o.position[1] = g - objectBounds(o).lo[1]; });                                   // its own lowest plane lands exactly on it
 }
 const isAddish = (s) => INDEF_RE.test(s) || /\b(add|create|spawn|insert|generate)\b/.test(s);
 
@@ -3307,6 +3382,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-11-01b  Exact centring: every shape is centred on its true xz symmetry axis and the midpoint of its full vertical extent; ground, stacking and relative placement use real bounding planes',
   '2026-11-01a  Agent: every shape is centred on its own origin; the default camera frames the middle of the whole scene (reset camera and the starter scene re-centre too)',
   '2026-10-31ac  Robotics: wording says bin; "bin to x z" moves the bin',
   '2026-10-31ab  Robotics: shape changes and planned moves start from a safe pose (fixes a blocked pick after shrinking the joint count)',
