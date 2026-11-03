@@ -239,7 +239,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-11-01d · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-11-01e · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -428,6 +428,25 @@ function downloadText(filename, text, type = 'model/x3d+xml') {
 
 /* ═══ X3D Agent engine (parser, shapes, scene model) ═══ */
 const Agent = (() => {
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     MODULE MAP (dependencies only ever point UP this list; nothing refers to a module below it)
+       Data         15 statements   uses: —
+       Vocab         9 statements   uses: Data
+       Parse         7 statements   uses: Data
+       Look          7 statements   uses: Data
+       Geometry     43 statements   uses: Data, Look
+       Emit         23 statements   uses: Data, Look, Geometry
+       SceneModel    1 statements   uses: Emit, Data, Geometry, Look
+       Place        22 statements   uses: Data, Vocab, Emit, Look, Geometry
+       Engine       77 statements   uses: Data, Place, Vocab, Parse, Look, Emit, Geometry, SceneModel
+     Each module is a closure; it receives only what it names in its  const { … } = Mod.X  line and
+     publishes only what it lists in its  return { … }. Behaviour is identical to the single-closure build.
+     ═══════════════════════════════════════════════════════════════════════════ */
+  const Mod = {};
+
+  /* ─── module Data ────────────────────────────────────────────────────────────── */
+  Mod.Data = (() => {
 const DATA = {
  "COLORS": {"red": [1.0, 0.0, 0.0], "green": [0.0, 0.8, 0.0], "blue": [0.0, 0.4, 1.0], "yellow": [1.0, 1.0, 0.0], "orange": [1.0, 0.5, 0.0], "purple": [0.5, 0.0, 0.8], "pink": [1.0, 0.4, 0.7], "magenta": [1.0, 0.0, 1.0], "cyan": [0.0, 1.0, 1.0], "teal": [0.0, 0.5, 0.5], "white": [1.0, 1.0, 1.0], "black": [0.05, 0.05, 0.05], "gray": [0.5, 0.5, 0.5], "grey": [0.5, 0.5, 0.5], "brown": [0.5, 0.25, 0.1], "gold": [1.0, 0.84, 0.0], "silver": [0.75, 0.75, 0.75], "lime": [0.2, 1.0, 0.0], "indigo": [0.29, 0.0, 0.51], "turquoise": [0.25, 0.88, 0.82], "crimson": [0.86, 0.08, 0.24], "coral": [1.0, 0.5, 0.31], "salmon": [0.98, 0.5, 0.45], "navy": [0.0, 0.0, 0.5], "maroon": [0.5, 0.0, 0.0], "olive": [0.5, 0.5, 0.0], "tan": [0.82, 0.71, 0.55], "beige": [0.96, 0.96, 0.86], "ivory": [1.0, 1.0, 0.94], "ruby": [0.88, 0.07, 0.37], "emerald": [0.31, 0.78, 0.47], "sapphire": [0.06, 0.32, 0.73], "amber": [1.0, 0.75, 0.0], "bronze": [0.8, 0.5, 0.2], "copper": [0.72, 0.45, 0.2], "neon": [0.22, 1.0, 0.08], "electric": [0.0, 0.6, 1.0], "hot": [1.0, 0.07, 0.57], "dark": [0.15, 0.15, 0.15], "light": [0.85, 0.85, 0.85], "lavender": [0.71, 0.49, 0.86], "mint": [0.6, 1.0, 0.8], "peach": [1.0, 0.8, 0.64], "rose": [1.0, 0.3, 0.5], "lilac": [0.78, 0.64, 0.78], "chartreuse": [0.5, 1.0, 0.0], "aqua": [0.0, 1.0, 1.0], "sand": [0.76, 0.7, 0.5], "rust": [0.72, 0.25, 0.05], "scarlet": [1.0, 0.14, 0.0], "violet": [0.56, 0.0, 1.0], "plum": [0.56, 0.27, 0.52], "slate": [0.44, 0.5, 0.56], "cream": [1.0, 0.99, 0.82], "jade": [0.0, 0.66, 0.42], "cobalt": [0.0, 0.28, 0.67], "magma": [0.9, 0.2, 0.0], "ice": [0.8, 0.95, 1.0], "lemon": [1.0, 0.97, 0.0], "golden": [1.0, 0.84, 0.0], "wine": [0.45, 0.0, 0.13], "transparent": [0.5, 0.5, 0.5]},
  "TWO_WORD_COLORS": {"hot pink": [1.0, 0.07, 0.57], "dark red": [0.55, 0.0, 0.0], "dark blue": [0.0, 0.0, 0.55], "dark green": [0.0, 0.39, 0.0], "dark purple": [0.25, 0.0, 0.4], "dark gray": [0.2, 0.2, 0.2], "light blue": [0.53, 0.81, 0.98], "light green": [0.56, 0.93, 0.56], "light pink": [1.0, 0.71, 0.76], "light gray": [0.83, 0.83, 0.83], "neon green": [0.22, 1.0, 0.08], "neon pink": [1.0, 0.08, 0.58], "neon yellow": [1.0, 1.0, 0.0], "neon orange": [1.0, 0.45, 0.0], "neon blue": [0.1, 0.4, 1.0], "electric blue": [0.0, 0.6, 1.0], "electric green": [0.0, 1.0, 0.2], "deep purple": [0.29, 0.0, 0.51], "deep blue": [0.0, 0.0, 0.7], "deep red": [0.6, 0.0, 0.0], "bright orange": [1.0, 0.65, 0.0], "bright yellow": [1.0, 1.0, 0.2], "bright green": [0.0, 1.0, 0.2], "sky blue": [0.53, 0.81, 0.98], "forest green": [0.13, 0.55, 0.13], "lime green": [0.2, 1.0, 0.0], "baby blue": [0.54, 0.81, 0.94], "baby pink": [1.0, 0.85, 0.88], "ocean blue": [0.0, 0.47, 0.75], "fire red": [1.0, 0.15, 0.0], "fire orange": [1.0, 0.4, 0.0], "ice blue": [0.8, 0.95, 1.0], "rose gold": [0.91, 0.67, 0.62], "blood red": [0.65, 0.0, 0.0], "mint green": [0.6, 1.0, 0.8], "sand brown": [0.76, 0.7, 0.5], "pale blue": [0.69, 0.87, 0.9], "pale pink": [0.98, 0.85, 0.87]},
@@ -485,6 +504,12 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+  return { DATA, clamp, esc, f3, fmtPos, has, hexRgb, hsv, lum, mix, mod, mulberry32, num, rgbHex, wordRe };
+  })();
+
+  /* ─── module Vocab ───────────────────────────────────────────────────────────── */
+  Mod.Vocab = (() => {
+  const { DATA, clamp, esc, hexRgb, mix, num } = Mod.Data;
 
 /* ── Vocabulary extensions ─────────────────────────────────────────────────── */
 
@@ -587,6 +612,12 @@ function parseColorInfo(t, spans = findColors(t)) {
   if (m) return { rgb: [...DATA.COLORS[m[1]]], name: m[1], spans };
   return { rgb: [...DEFAULT_COLOR], name: 'blue', spans, defaulted: true };
 }
+  return { COLOR_NAMES, findColors, parseColorInfo };
+  })();
+
+  /* ─── module Parse ───────────────────────────────────────────────────────────── */
+  Mod.Parse = (() => {
+  const { DATA, clamp, num, wordRe } = Mod.Data;
 
 /* ── Plain parsers ─────────────────────────────────────────────────────────── */
 
@@ -636,6 +667,12 @@ function parseCount(t) {
   for (const [w, n] of Object.entries(NUM_WORDS)) if (wordRe(w).test(s)) return n;
   return 1;
 }
+  return { COORD_RE, NUM_WORDS, parseCount, parsePosition, parseRotation, parseSize };
+  })();
+
+  /* ─── module Look ────────────────────────────────────────────────────────────── */
+  Mod.Look = (() => {
+  const { clamp, f3, hsv, lum, mix, mulberry32, num, rgbHex } = Mod.Data;
 
 /* ── Materials, textures, styles ───────────────────────────────────────────── */
 
@@ -714,6 +751,22 @@ function appearanceXml(o, i) {
   }
   return `<Appearance><Material DEF="mat_${i}" diffuseColor="${diff.map(f3).join(' ')}" specularColor="${spec.map(f3).join(' ')}" emissiveColor="${emi.map(f3).join(' ')}" shininess="${shin}" transparency="${tr.toFixed(2)}"/>${tex}</Appearance>`;
 }
+
+function normObj(o) {
+  if (!o.anims) o.anims = o.anim ? [{ type: o.anim, speed: 1, dir: 1 }] : [];
+  if (!o.stretch) o.stretch = [1, 1, 1];
+  if (!o.finish) o.finish = 'default';
+  if (o.wire === undefined) o.wire = false;
+  if (o.texture === undefined) o.texture = null;
+  return o;
+}
+  return { FINISH_WORDS, TEXTURE_WORDS, appearanceXml, normObj, parseStyle };
+  })();
+
+  /* ─── module Geometry ────────────────────────────────────────────────────────── */
+  Mod.Geometry = (() => {
+  const { mod } = Mod.Data;
+  const { normObj } = Mod.Look;
 
 /* ── Geometry ──────────────────────────────────────────────────────────────── */
 // A mesh is { pts: [[x,y,z]], faces: [[i,j,k,...]], crease }. Faces wind CCW seen from outside.
@@ -1132,6 +1185,14 @@ function linesOf(shape, s) {
   }
   return null;
 }
+  return { faceStr, linesOf, meshOf, objectBounds };
+  })();
+
+  /* ─── module Emit ────────────────────────────────────────────────────────────── */
+  Mod.Emit = (() => {
+  const { esc, f3, hsv, mulberry32 } = Mod.Data;
+  const { appearanceXml, normObj } = Mod.Look;
+  const { faceStr, linesOf, meshOf } = Mod.Geometry;
 
 /* ── Object → X3D ──────────────────────────────────────────────────────────── */
 
@@ -1156,15 +1217,6 @@ function edgesOf(m) {
   return out;
 }
 const lineSet = (pts, edges) => `<IndexedLineSet coordIndex="${edges.map((e) => e.join(' ') + ' -1').join(' ')}"><Coordinate point="${pointStr(pts)}"/></IndexedLineSet>`;
-
-function normObj(o) {
-  if (!o.anims) o.anims = o.anim ? [{ type: o.anim, speed: 1, dir: 1 }] : [];
-  if (!o.stretch) o.stretch = [1, 1, 1];
-  if (!o.finish) o.finish = 'default';
-  if (o.wire === undefined) o.wire = false;
-  if (o.texture === undefined) o.texture = null;
-  return o;
-}
 
 function shapeBody(o, i) {
   const s = o.size;
@@ -1310,6 +1362,15 @@ function starsXml() {
   for (let k = 0; k < 600; k++) { const u = r() * 2 - 1, a = r() * 2 * Math.PI, q = Math.sqrt(1 - u * u); pts.push([90 * q * Math.cos(a), 90 * u, 90 * q * Math.sin(a)]); }
   return `    <Shape><PointSet><Coordinate point="${pointStr(pts)}"/></PointSet><Appearance><Material diffuseColor="0 0 0" emissiveColor="1 1 1"/></Appearance></Shape>\n`;
 }
+  return { ANIMS, ANIM_RES, DEFAULT_LIGHTS, LIGHT_PRESETS, SKY_PRESETS, SPOT, STOP_RE, VIEWPOINTS, animationXml, lineSet, objectXml, parseAnimations, pluralOf, setAnims, shapeLabel, starsXml };
+  })();
+
+  /* ─── module SceneModel ──────────────────────────────────────────────────────── */
+  Mod.SceneModel = (() => {
+  const { DEFAULT_LIGHTS, SPOT, VIEWPOINTS, animationXml, lineSet, objectXml, starsXml } = Mod.Emit;
+  const { f3, mix, rgbHex } = Mod.Data;
+  const { objectBounds } = Mod.Geometry;
+  const { normObj } = Mod.Look;
 
 /* ── Scene model ───────────────────────────────────────────────────────────── */
 
@@ -1430,6 +1491,16 @@ ${this.environmentXml()}${this.contentXml()}  </Scene>
     }
   }
 }
+  return { Scene };
+  })();
+
+  /* ─── module Place ───────────────────────────────────────────────────────────── */
+  Mod.Place = (() => {
+  const { DATA, esc, mulberry32, wordRe } = Mod.Data;
+  const { findColors } = Mod.Vocab;
+  const { DEFAULT_LIGHTS, SKY_PRESETS, shapeLabel } = Mod.Emit;
+  const { normObj } = Mod.Look;
+  const { objectBounds } = Mod.Geometry;
 
 /* ── Shape / target lookup ─────────────────────────────────────────────────── */
 
@@ -1645,6 +1716,19 @@ function details(o) {
   if (o.shape === 'text' && o.text) d.push(`"${o.text}"`);
   return d.length ? ` (${d.join(', ')})` : '';
 }
+  return { ALL_RE, NEG_RE, SA, SHAPE_KEYS, applyEnv, colorMatch, describe, details, findShapes, multiPositions, parseArrangement, parseEnv, parseRelation, relPos, resolveTargets };
+  })();
+
+  /* ─── module Engine ──────────────────────────────────────────────────────────── */
+  Mod.Engine = (() => {
+  const { DATA, clamp, esc, f3, fmtPos, has, hsv, mulberry32, num, wordRe } = Mod.Data;
+  const { ALL_RE, NEG_RE, SA, SHAPE_KEYS, applyEnv, colorMatch, describe, details, findShapes, multiPositions, parseArrangement, parseEnv, parseRelation, relPos, resolveTargets } = Mod.Place;
+  const { COLOR_NAMES, findColors, parseColorInfo } = Mod.Vocab;
+  const { COORD_RE, NUM_WORDS, parseCount, parsePosition, parseRotation, parseSize } = Mod.Parse;
+  const { FINISH_WORDS, TEXTURE_WORDS, normObj, parseStyle } = Mod.Look;
+  const { ANIMS, ANIM_RES, LIGHT_PRESETS, SKY_PRESETS, STOP_RE, VIEWPOINTS, parseAnimations, pluralOf, setAnims, shapeLabel } = Mod.Emit;
+  const { linesOf, meshOf, objectBounds } = Mod.Geometry;
+  const { Scene } = Mod.SceneModel;
 
 /* ── Editing existing objects ──────────────────────────────────────────────── */
 
@@ -2667,7 +2751,14 @@ function selfTest() {
   if (bad.length) { lines.push('Failures:'); bad.forEach((c) => c.fails.forEach((f) => lines.push(` - [${c.name}] ${f}`))); } else lines.push('Nothing failed.');
   return lines.join('\n');
 }
+  return { nlpCanon, nlpLexicon, nlpRepair, runCommand, selfTest, vocab };
+  })();
 
+  /* ─── public API ──────────────────────────────────────────────────── */
+  const { DATA } = Mod.Data;
+  const { Scene } = Mod.SceneModel;
+  const { nlpCanon, nlpLexicon, nlpRepair, runCommand, selfTest, vocab } = Mod.Engine;
+  const { describe, details } = Mod.Place;
 return { DATA, Scene, runCommand, describe, details, vocab, selfTest, _nl: { lexicon: () => [...nlpLexicon().long], repair: nlpRepair, canon: nlpCanon } };
 })();
 
@@ -3445,6 +3536,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-11-01e  Structure: the Agent engine is split into nine modules (Data, Vocab, Parse, Look, Geometry, Emit, SceneModel, Place, Engine) with explicit imports and exports; behaviour unchanged',
   '2026-11-01d  Selftest: new "centring" category checks every shape (geometry, exported X3D, ground / above / right-of placement)',
   '2026-11-01c  Agent: rocket, spiral staircase and helix are centred on their own vertical axis (fins/steps no longer pull them off it)',
   '2026-11-01b  Exact centring: every shape is centred on its true xz symmetry axis and the midpoint of its full vertical extent; ground, stacking and relative placement use real bounding planes',
