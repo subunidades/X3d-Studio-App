@@ -239,7 +239,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <button type="button" class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
           <button type="button" class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
-        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-11-01e · NL++ · Robotics)</span></div></div></div>
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips. <span id="buildTag" style="opacity:.6">(build 2026-11-01f · NL++ · Robotics)</span></div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
         <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input type="text" class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button type="button" class="save-btn" id="saveBtn">Save</button></div>
@@ -1979,7 +1979,7 @@ const HELP = [
   'FLOW: chain with "then"/"and" (add a red cube then put a blue sphere on top of it) · name things (a cube called bob → move bob up) · another one / two more · twice as big as the cube',
   'SCENES: build a forest / village / city / solar system / campfire · make it spooky / cozy / underwater / winter / desert / alien / dreamy / cyberpunk',
   'WORLD: add ground / grass / water / grid floor · fog · sunset sky · night sky with stars · shadows · axes · day / night / neon · look at the cube · top view',
-  'CHECK: selftest (runs the built-in phrase checks) · vocab (every verb it knows) · misses (phrases it did not understand) · version',
+  'CHECK: selftest (runs the built-in phrase checks) · vocab (every verb it knows) · misses (phrases it did not understand) · improve (what it has taught itself; "forget learned" resets) · version',
 ].join('\n');
 
 /** Built from ordinary commands, so it doubles as a demo of the vocabulary. Kept within ±3.4 x / ±3 y so it fits any screen shape, and free of Text nodes so the first paint needs no font downloads. */
@@ -2596,8 +2596,19 @@ function setLighting(scene, preset) {
   return { status: 'success', message: `Lighting set to '${preset}'.` };
 }
 
+/* Learned rewrites, written only by the Improve loop in the UI layer. Word aliases and whole-phrase aliases. */
+let LEARN = { tok: {}, phr: {} };
+const setLearned = (l) => { LEARN = { tok: (l && l.tok) || {}, phr: (l && l.phr) || {} }; };
+function learnApply(text) {
+  const k = text.toLowerCase().replace(/\s+/g, ' ').replace(/[?!.]+$/, '').trim();
+  if (LEARN.phr[k]) return LEARN.phr[k];
+  let t = text;
+  for (const [f, to] of Object.entries(LEARN.tok)) t = t.replace(new RegExp('\\b' + f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), to);
+  return t;
+}
 /** Applies a prompt to the scene. Returns { status, message } (status 'pending' means: load an archive scene). */
 function runCommand(scene, text) {
+  try { text = learnApply(String(text)); } catch (e) { /* keep */ }
   let fixes = [];
   try { const rp = nlpRepair(String(text), scene); text = rp.text; fixes = rp.fixes; } catch (e) { text = String(text); }
   try { text = nlpDistribute(nlpCanon(text, scene)); } catch (e) { /* keep */ }
@@ -2749,17 +2760,18 @@ function selfTest() {
   const lines = [`Self-test: ${pass}/${tot} passed (${(100 * pass / tot).toFixed(1)}%) in ${ms} ms`, cats.map((c) => `${c.name} ${c.pass}/${c.tot}`).join(' · ')];
   const bad = cats.filter((c) => c.fails.length);
   if (bad.length) { lines.push('Failures:'); bad.forEach((c) => c.fails.forEach((f) => lines.push(` - [${c.name}] ${f}`))); } else lines.push('Nothing failed.');
+  selfTest.last = { pass, tot };
   return lines.join('\n');
 }
-  return { nlpCanon, nlpLexicon, nlpRepair, runCommand, selfTest, vocab };
+  return { nlpCanon, nlpLexicon, nlpRepair, runCommand, selfTest, vocab, setLearned };
   })();
 
   /* ─── public API ──────────────────────────────────────────────────── */
   const { DATA } = Mod.Data;
   const { Scene } = Mod.SceneModel;
-  const { nlpCanon, nlpLexicon, nlpRepair, runCommand, selfTest, vocab } = Mod.Engine;
+  const { nlpCanon, nlpLexicon, nlpRepair, runCommand, selfTest, vocab, setLearned } = Mod.Engine;
   const { describe, details } = Mod.Place;
-return { DATA, Scene, runCommand, describe, details, vocab, selfTest, _nl: { lexicon: () => [...nlpLexicon().long], repair: nlpRepair, canon: nlpCanon } };
+return { DATA, Scene, runCommand, describe, details, vocab, selfTest, setLearned, selfScore: () => { selfTest(); return { ...selfTest.last }; }, _nl: { lexicon: () => [...nlpLexicon().long], repair: nlpRepair, canon: nlpCanon } };
 })();
 
 /* ═══ Kähler surface generators ═══ */
@@ -3536,6 +3548,7 @@ async function loadArchive(key) {
 const STORE_MISS = 'x3d-studio:misses';
 const MISS_RE = /(?:^|\n)(?:\d+\.\s*)?(?:Not sure what shape|I found that object but don't know|I found the object but wasn't sure|I couldn't|That sounds like a question|What should the text say)/;
 const CHANGELOG = [
+  '2026-11-01f  Agent: self-improvement loop (a miss + your rephrase becomes a candidate rule, kept only if selftest and every earlier lesson still pass); "improve" shows it',
   '2026-11-01e  Structure: the Agent engine is split into nine modules (Data, Vocab, Parse, Look, Geometry, Emit, SceneModel, Place, Engine) with explicit imports and exports; behaviour unchanged',
   '2026-11-01d  Selftest: new "centring" category checks every shape (geometry, exported X3D, ground / above / right-of placement)',
   '2026-11-01c  Agent: rocket, spiral staircase and helix are centred on their own vertical axis (fins/steps no longer pull them off it)',
@@ -3575,6 +3588,69 @@ const CHANGELOG = [
   '2026-10-24a  "next to" fixed, "it" follows the last object, start over, same color as, move to where',
   '2026-10-23a  corrupt saves can no longer break loading; SRI check removed',
 ];
+/* ── Self-improvement loop ──
+   miss → the user's very next successful rephrase → candidate rule (word alias or phrase alias) →
+   GATE: the miss now works, selftest does not drop, and every earlier lesson still works → commit (generation +1).
+   Accepted lessons are kept as regression tests, so the checker grows with the app. Strategies are ranked by their own
+   acceptance rate, so the loop also tunes how it proposes. Rules never touch code; they are data the engine reads. */
+const STORE_LEARN = 'x3d-studio:learned';
+const Improve = (() => {
+  const norm = (s) => String(s).toLowerCase().replace(/\s+/g, ' ').replace(/[?!.]+$/, '').trim();
+  const blank = () => ({ gen: 0, tok: {}, phr: {}, hist: [], stats: { token: { a: 0, r: 0 }, phrase: { a: 0, r: 0 } } });
+  let L = Object.assign(blank(), readJSON(STORE_LEARN, {}));
+  let lastMiss = null;
+  const save = () => writeJSON(STORE_LEARN, L);
+  const seed = () => { const sc = new Agent.Scene(); ['add a red sphere at -4 0 0', 'add a blue cube at -2 0 0', 'add a gold cone at 0 0 0'].forEach((c) => Agent.runCommand(sc, c)); return sc; };
+  const works = (p) => { try { return Agent.runCommand(seed(), p).status === 'success'; } catch (e) { return false; } };
+  const score = () => { try { return Agent.selfScore(); } catch (e) { return { pass: -1, tot: 0 }; } };
+  const rate = (k) => (L.stats[k].a + 1) / (L.stats[k].a + L.stats[k].r + 2);
+  const sim = (a, b) => { const x = a.split(' '), y = b.split(' '); return x.filter((w) => y.includes(w)).length / Math.max(x.length, y.length); };
+  Agent.setLearned(L);
+  function candidates(miss, fix) {
+    const a = miss.split(' '), b = fix.split(' '), out = [];
+    if (a.length === b.length) { const d = a.map((w, i) => i).filter((i) => a[i] !== b[i]); if (d.length === 1 && a[d[0]].length > 2) out.push({ kind: 'token', from: a[d[0]], to: b[d[0]] }); }
+    if (sim(miss, fix) >= 0.5) out.push({ kind: 'phrase', from: miss, to: fix });
+    return out.sort((x, y) => rate(y.kind) - rate(x.kind));
+  }
+  function propose(missRaw, fixRaw) {
+    const miss = norm(missRaw), fix = norm(fixRaw);
+    if (!miss || miss === fix || miss.length > 120 || L.phr[miss]) return null;
+    const lex = new Set(Agent._nl.lexicon()), base = score().pass;
+    for (const c of candidates(miss, fix)) {
+      if (c.kind === 'token' && (lex.has(c.from) || L.tok[c.from])) continue;      // never hijack a word the engine already knows
+      const trial = JSON.parse(JSON.stringify(L));
+      trial[c.kind === 'token' ? 'tok' : 'phr'][c.from] = c.to;
+      Agent.setLearned(trial);
+      if (works(miss) && score().pass >= base && L.hist.every((h) => works(h.m))) {
+        trial.gen++; trial.stats[c.kind].a++; trial.hist = trial.hist.concat({ m: miss, f: fix }).slice(-40);
+        L = trial; save();
+        return { ...c, gen: L.gen };
+      }
+      L.stats[c.kind].r++;
+    }
+    Agent.setLearned(L); save();
+    return null;
+  }
+  function observe(text, r) {
+    if (MISS_RE.test(String(r.message || ''))) { lastMiss = text; return; }
+    if (r.status !== 'success' || !lastMiss) return;
+    const m = lastMiss; lastMiss = null;
+    setTimeout(() => {
+      const g = propose(m, text);
+      if (g) addLog('info', 'Learned', `Generation ${g.gen}: ${g.kind === 'token' ? `"${g.from}" now means "${g.to}"` : `"${g.from}" now means "${g.to}" (whole phrase)`}. Selftest did not drop and every earlier lesson still works.`);
+    }, 0);
+  }
+  function report() {
+    const sc = score(), words = Object.entries(L.tok), phrases = Object.entries(L.phr);
+    return `Generation ${L.gen}. Selftest ${sc.pass}/${sc.tot} with all learned rules on.\n` +
+      (words.length ? 'Words it taught itself:\n' + words.map(([f, t]) => ` - ${f} → ${t}`).join('\n') + '\n' : '') +
+      (phrases.length ? 'Phrases it taught itself:\n' + phrases.map(([f, t]) => ` - ${f} → ${t}`).join('\n') + '\n' : '') +
+      (L.gen ? '' : 'Nothing learned yet. Say something it misses, then rephrase it in words it knows; if the fix passes the gate it keeps the lesson.\n') +
+      `Proposal success so far: word aliases ${L.stats.token.a} kept / ${L.stats.token.r} rejected · phrase aliases ${L.stats.phrase.a} kept / ${L.stats.phrase.r} rejected. Regression memory: ${L.hist.length} lesson(s).`;
+  }
+  function forget() { L = blank(); Agent.setLearned(L); save(); }
+  return { observe, report, forget };
+})();
 function noteMiss(text, r) {
   if (!MISS_RE.test(String(r.message || ''))) return;
   const raw = readJSON(STORE_MISS, []), arr = Array.isArray(raw) ? raw : [], key = text.trim().toLowerCase(), hit = arr.find((m) => m && m.p === key);
@@ -3599,6 +3675,8 @@ function metaCommand(text) {
     try { if (navigator.clipboard) navigator.clipboard.writeText(txt).catch(() => {}); } catch (e) { /* clipboard is best-effort */ }
     return { label: 'Misses', message: txt + '\n(Copied if your browser allows it; otherwise select the text above.)' };
   }
+  if (/^(?:improve|improvement|learned|what have you learned|what did you learn)$/.test(tl)) return { label: 'Improve', message: Improve.report() };
+  if (/^(?:forget learned|forget what you learned|reset learned|reset learning)$/.test(tl)) { Improve.forget(); return { label: 'Improve', message: 'Learned rules cleared. Back to generation 0.' }; }
   if (/^(?:version|changelog|what version(?: is this)?)$/.test(tl)) return { label: 'Version', message: (($('buildTag') || {}).textContent || '').replace(/[()]/g, '') + '\n' + CHANGELOG.join('\n') };
   return null;
 }
@@ -3619,6 +3697,7 @@ async function run(override) {
     let r = Agent.runCommand(scene, text);
     if (r.status === 'pending') r = await loadArchive(r.archiveKey);
     noteMiss(text, r);
+    Improve.observe(text, r);
     addLog(r.status === 'success' ? 'ai' : r.status === 'error' ? 'error' : 'info', r.status === 'error' ? 'Error' : 'Scene', r.message);
     if (r.status === 'success') render();
   } catch (e) { addLog('error', 'Error', e.message); }
